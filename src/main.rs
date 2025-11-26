@@ -1,7 +1,7 @@
 #![windows_subsystem = "windows"]
 
 use daktilo_lib::{app::App, audio, embed::EmbeddedConfig};
-use rdev::{listen, Key};
+use rdev::listen;
 use rodio::{cpal::traits::HostTrait, DeviceTrait};
 use serde::{Deserialize, Serialize};
 use std::sync::mpsc;
