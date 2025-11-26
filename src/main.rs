@@ -1,7 +1,7 @@
 #![windows_subsystem = "windows"]
 
 use daktilo_lib::{app::App, audio, embed::EmbeddedConfig};
-use rdev::listen;
+use rdev::{listen, Key};
 use rodio::{cpal::traits::HostTrait, DeviceTrait};
 use serde::{Deserialize, Serialize};
 use std::sync::mpsc;
@@ -44,7 +44,8 @@ fn main() {
         .with(tracing_subscriber::EnvFilter::from_default_env())
         .init();
 
-    let presets = EmbeddedConfig::parse().unwrap().sound_presets;
+    let config = EmbeddedConfig::parse().unwrap();
+    let presets = config.sound_presets;
     let devices = audio::get_devices().expect("Fail to get computer audio devices");
     let (tx, rx) = mpsc::channel();
 
@@ -99,18 +100,26 @@ fn main() {
     let init_device_name = state.current_device_name.clone();
     let init_preset_name = state.current_preset_name.clone();
     let mut enabled = state.enabled;
+    let mut mute = true;
+
     tracing::debug!("Current device: {}", state.current_device_name);
     std::thread::spawn(move || {
         let preset = presets_clone
             .iter()
             .find(|p| p.name == init_preset_name)
             .unwrap();
-        let mut app = App::init(preset.clone(), None, Some(init_device_name)).unwrap();
+        let mut app = App::init(
+            config.mute_key,
+            preset.clone(),
+            None,
+            Some(init_device_name),
+        )
+        .unwrap();
         loop {
             match rx.recv() {
                 Ok(EventKind::KeyEvent(event)) => {
                     if enabled {
-                        app.handle_key_event(event.clone()).unwrap()
+                        mute = app.handle_key_event(event.clone()).unwrap().mute;
                     }
                 }
                 Ok(EventKind::ChangeConfig {
@@ -121,8 +130,13 @@ fn main() {
                         .iter()
                         .find(|p| p.name == preset_name)
                         .unwrap();
-                    app =
-                        App::init(preset.clone(), None, Some(device_name.to_lowercase())).unwrap();
+                    app = App::init(
+                        config.mute_key,
+                        preset.clone(),
+                        None,
+                        Some(device_name.to_lowercase()),
+                    )
+                    .unwrap();
                 }
                 Ok(EventKind::Enabled(is_enabled)) => enabled = is_enabled,
                 Err(e) => {

@@ -12,7 +12,7 @@ keywords = ["tray", "keyboard", "typewriter", "type", "nostalgic"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-daktilo_lib = "0.6.1"
+daktilo_lib = { path = "../daktilo/crates/daktilo_lib" }
 directories = "5.0.1"
 image = "0.25.1"
 rdev = "0.5.3"
