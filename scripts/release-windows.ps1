@@ -4,8 +4,9 @@ param(
     [string]$Store,
     [ValidateSet("CurrentUser", "LocalMachine")][string]$StoreLocation,
     [Parameter(Mandatory = $true)][string]$PfxPassword,
-    [Parameter(Mandatory = $true)][string]$Repo,
+    [string]$Repo,
     [string]$EnvFile = ".\.codesign.env",
+    [string]$Environment,
     [string[]]$DistArgs = @("--installer", "msi"),
     [switch]$SkipSecrets,
     [string]$Tag,
@@ -61,6 +62,12 @@ if ($metadata) {
         if (-not $PSBoundParameters.ContainsKey("EnvFile") -and $settings.env_file) {
             $EnvFile = $settings.env_file
         }
+        if (-not $PSBoundParameters.ContainsKey("Repo") -and $settings.repo) {
+            $Repo = $settings.repo
+        }
+        if (-not $PSBoundParameters.ContainsKey("Environment") -and $settings.environment) {
+            $Environment = $settings.environment
+        }
         if ($resolvedChannel) {
             Write-Host "Codesign channel resolved to '$resolvedChannel' via dist metadata."
         }
@@ -83,6 +90,9 @@ if (-not $SkipSecrets) {
     if (-not ($SubjectName -or $Thumbprint)) {
         throw "Provide -SubjectName or -Thumbprint when exporting secrets."
     }
+    if (-not $Repo) {
+        throw "Provide -Repo or declare 'repo' under the selected codesign channel in dist-workspace.toml."
+    }
     $bootstrapArgs = @{}
     if ($SubjectName) { $bootstrapArgs.SubjectName = $SubjectName }
     if ($Thumbprint) { $bootstrapArgs.Thumbprint = $Thumbprint }
@@ -91,6 +101,7 @@ if (-not $SkipSecrets) {
     $bootstrapArgs.PfxPassword = $PfxPassword
     $bootstrapArgs.Repo = $Repo
     $bootstrapArgs.EnvFile = $EnvFile
+    if ($Environment) { $bootstrapArgs.Environment = $Environment }
     & $bootstrapScript @bootstrapArgs
 }
 

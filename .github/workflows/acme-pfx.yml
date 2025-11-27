@@ -20,14 +20,23 @@ on:
         description: "Optional DNS provider (set to cloudflare to use DNS-01)"
         required: false
         type: string
+      environment_name:
+        description: "GitHub environment that should receive WINDOWS_CODESIGN_* secrets"
+        required: false
+        default: "codesign-prod"
+        type: string
 jobs:
   request:
     name: Mint certificate
     runs-on: windows-latest
     permissions:
       contents: read
+      secrets: write
+    environment:
+      name: ${{ inputs.environment_name }}
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - name: Install Caddy
@@ -78,6 +87,13 @@ jobs:
           ) | Set-Content -Encoding UTF8 -Path $envFile
           "pfx-path=$outputPfx" >> $Env:GITHUB_OUTPUT
           "env-path=$envFile" >> $Env:GITHUB_OUTPUT
+          $targetEnv = "${{ inputs.environment_name }}"
+          if ($targetEnv) {
+            $repo = "${{ github.repository }}"
+            Write-Host "Publishing WINDOWS_CODESIGN_* secrets to $repo (env: $targetEnv)"
+            gh secret set WINDOWS_CODESIGN_PFX --repo $repo --env $targetEnv --body $base64
+            gh secret set WINDOWS_CODESIGN_PASSWORD --repo $repo --env $targetEnv --body $pfxPassword
+          }
       - name: Upload requested cert bundle
         uses: actions/upload-artifact@v4
         with:

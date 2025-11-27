@@ -198,6 +198,44 @@ jobs:
             ${{ env.BUILD_MANIFEST_NAME }}
 
   # Build and package all the platform-agnostic(ish) things
+  installer-smoke:
+    needs:
+      - plan
+      - build-local-artifacts
+    if: ${{ fromJson(needs.plan.outputs.val).ci.github.artifacts_matrix.include != null && (needs.plan.outputs.publishing == 'true' || fromJson(needs.plan.outputs.val).ci.github.pr_run_mode == 'upload') }}
+    runs-on: "windows-latest"
+    env:
+      DIST_CHANNEL: ${{ github.event_name == 'pull_request' && 'dev' || 'stable' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: recursive
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: 'artifacts-build-local-*pc-windows*'
+          path: artifacts
+          merge-multiple: true
+      - name: Run installer smoke test
+        shell: pwsh
+        env:
+          DIST_CHANNEL: ${{ github.event_name == 'pull_request' && 'dev' || 'stable' }}
+        run: |
+          if (-not $env:DIST_CHANNEL) {
+            $env:DIST_CHANNEL = "stable"
+          }
+          ./scripts/test-installer.ps1 `
+            -ArtifactsDir "$PWD\artifacts" `
+            -Channel $env:DIST_CHANNEL `
+            -ConfigPath "dist-workspace.toml"
+      - name: Upload installer logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-smoke-${{ github.run_id }}
+          path: target/smoke-tests
+          retention-days: 7
   build-global-artifacts:
     needs:
       - plan
@@ -249,8 +287,9 @@ jobs:
       - plan
       - build-local-artifacts
       - build-global-artifacts
+      - installer-smoke
     # Only run if we're "publishing", and only if plan, local and global didn't fail (skipped is fine)
-    if: ${{ always() && needs.plan.result == 'success' && needs.plan.outputs.publishing == 'true' && (needs.build-global-artifacts.result == 'skipped' || needs.build-global-artifacts.result == 'success') && (needs.build-local-artifacts.result == 'skipped' || needs.build-local-artifacts.result == 'success') }}
+    if: ${{ always() && needs.plan.result == 'success' && needs.plan.outputs.publishing == 'true' && (needs.build-global-artifacts.result == 'skipped' || needs.build-global-artifacts.result == 'success') && (needs.build-local-artifacts.result == 'skipped' || needs.build-local-artifacts.result == 'success') && (needs.installer-smoke.result == 'skipped' || needs.installer-smoke.result == 'success') }}
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     runs-on: "ubuntu-22.04"
@@ -326,3 +365,7 @@ jobs:
         with:
           persist-credentials: false
           submodules: recursive
+
+
+
+

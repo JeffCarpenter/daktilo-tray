@@ -125,7 +125,7 @@
 * Forward Plan
 :PROPERTIES:
 :owner: Codex
-:last_reviewed: 2025-11-27T18:45:00-06:00
+:last_reviewed: 2025-11-27T21:00:00-06:00
 :intent: Hardening + coverage
 :END:
 ** Automation Worklist
@@ -133,9 +133,9 @@
 :status: queued
 :confidence: high
 :END:
-- ?? *Secret routing*: teach `scripts/release-windows.ps1` to read its `-Repo`/`-EnvFile` target from `[workspace.metadata.dist.codesign.channels.*]` so channel metadata drives the entire `gh secret set` story.
-- ?? *Installer smoke tests*: add a Windows CI job that installs the freshly signed MSI, confirms the autostart registry entries honor channel defaults, and captures `signtool verify` output for each artifact.
-- ?? *ACME workflow hardening*: wrap `acme-pfx.yml` in a protected GitHub environment with approvals and auto-promote the emitted `.env` snapshot into environment secrets for the release wizard.
+- [X] *Secret routing*: teach `scripts/release-windows.ps1` to read its `-Repo`/`-EnvFile` target from `[workspace.metadata.dist.codesign.channels.*]` so channel metadata drives the entire `gh secret set` story.
+- [X] *Installer smoke tests*: add a Windows CI job that installs the freshly signed MSI, confirms the autostart registry entries honor channel defaults, and captures `signtool verify` output for each artifact.
+- [X] *ACME workflow hardening*: wrap `acme-pfx.yml` in a protected GitHub environment with approvals and auto-promote the emitted `.env` snapshot into environment secrets for the release wizard.
 - ?? *Built-in reporting*: add a reusable PowerShell helper that turns `cargo llvm-cov --json` + test logs into a Markdown block appended to `$GITHUB_STEP_SUMMARY`, staying under the documented per-step size limits while surfacing pass/fail counts and coverage deltas inline.
 - ?? *JUnit plumbing*: pilot `dorny/test-reporter@v2` (or CTRF) on Windows runs so PRs get rich test status checks without third-party dashboards; confirm artifact permissions for forked PRs and document the limitations + required workflow separation.
 ** Coverage Roadmap
@@ -146,3 +146,19 @@
 - ?? *Codecov uplink*: feed `target/coverage/lcov.info` into Codecov (or equivalent) once tokens land so reviewers see deltas inline.
 - ?? *Budget enforcement*: snapshot the current coverage % and fail the coverage job if new commits dip below the agreed floor (allow per-channel overrides if needed).
 - ?? *HTML publishing*: surface the generated coverage HTML via Pages or PR comments so contributors can inspect hit/miss heatmaps without downloading artifacts.
+*** 2025-11-27T20:05:00-06:00 Research refresh
+- Re-read AreWeWebYet's cryptography status board; it still lists battle-tested TLS/lib crates (ring, rustls, libsodium bindings) as "+" so leaning on them for signing helpers remains low risk.
+- GitHub API still shows RustCrypto core repos (hashes, AEADs, block-ciphers, elliptic-curves, password-hashes) active within 24h; star/issue counts confirm we are leaning on well-maintained crates.
+- Rustdocs for cargo-pants 0.4.38 expose helpers like audit_with_iq_server and BOM model types (PackageName::as_str), reinforcing that we can expand the PowerShell wrapper without reverse engineering the CLI output format.
+- Re-read GitHub's $GITHUB_STEP_SUMMARY guidance (1 MiB per step, Markdown only) so our coverage/test reporters stay within platform limits while adding richer summaries later.
+** 2025-11-27T20:20:00-06:00 Codesign metadata routing
+- Added repo/environment fields under each codesign channel in dist-workspace.toml so every automation entry point knows which GitHub repo+environment should receive WINDOWS_CODESIGN_* secrets.
+- Updated scripts/release-windows.ps1 to auto-hydrate -Repo/-EnvFile/-Environment from that metadata (and to throw when secrets are requested without a repo), so the release wizard becomes a true one-flag experience per channel.
+- Plumbed the new Environment parameter through bootstrap-codesign.ps1 and prepare-codesign-secrets.ps1 so gh secret set can target GH environments out of the box.
+** 2025-11-27T20:40:00-06:00 Installer smoke automation
+- Added DAKTILO_AUTOSTART_ONLY short-circuit to src/main.rs so we can toggle run-on-login defaults without spinning up the tray event loop, enabling unattended tests.
+- Authored scripts/test-installer.ps1 to install the MSI, run the new env-var path, inspect the HKCU Run entry, run signtool verify, and clean up logs under target/smoke-tests.
+- Extended .github/workflows/release.yml with an installer-smoke job (gated by the same publishing logic) and prevented host release uploads unless the smoke test job passes.
+** 2025-11-27T21:00:00-06:00 ACME workflow hardening
+- Introduced an environment_name input + GitHub environment binding to .github/workflows/acme-pfx.yml and granted secrets:write so runs require the protected env gate.
+- Injected gh secret set into the issuance step so WINDOWS_CODESIGN_* secrets are promoted directly into the requested environment whenever a new Let's Encrypt PFX is minted.

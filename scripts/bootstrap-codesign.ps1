@@ -5,7 +5,8 @@ param(
     [ValidateSet("CurrentUser", "LocalMachine")][string]$StoreLocation = "CurrentUser",
     [Parameter(Mandatory = $true)][string]$PfxPassword,
     [string]$Repo,
-    [string]$EnvFile = ".\.codesign.env"
+    [string]$EnvFile = ".\.codesign.env",
+    [string]$Environment
 )
 
 if (-not ($SubjectName -or $Thumbprint)) {
@@ -43,7 +44,16 @@ try {
     if (-not (Test-Path $prepareScript)) {
         throw "Missing helper script: $prepareScript"
     }
-    & $prepareScript -PfxPath $tempPfx -PfxPassword $PfxPassword -Repo $Repo -EnvFile $EnvFile
+    $prepareArgs = @{
+        PfxPath    = $tempPfx
+        PfxPassword = $PfxPassword
+        Repo       = $Repo
+        EnvFile    = $EnvFile
+    }
+    if ($Environment) {
+        $prepareArgs.Environment = $Environment
+    }
+    & $prepareScript @prepareArgs
 }
 finally {
     if (Test-Path $tempPfx) {

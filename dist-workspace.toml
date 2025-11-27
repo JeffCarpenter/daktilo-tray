@@ -21,6 +21,8 @@ description = "Self-signed developer cert minted locally via provision-dev-cert.
 store = "My"
 store_location = "CurrentUser"
 subject = "CN=Daktilo Tray Dev Signing"
+repo = "ndtoan96/daktilo-tray"
+environment = "codesign-dev"
 env_file = ".codesign.dev.env"
 
 [workspace.metadata.dist.codesign.channels.stable]
@@ -28,6 +30,8 @@ description = "Publicly trusted cert stored in the LocalMachine store (imported 
 store = "My"
 store_location = "LocalMachine"
 thumbprint = "REPLACE_WITH_PROD_CERT_THUMBPRINT"
+repo = "ndtoan96/daktilo-tray"
+environment = "codesign-prod"
 env_file = ".codesign.env"
 
 [workspace.metadata.dist.supply_chain]

@@ -22,6 +22,9 @@ const ICON_DISABLED: &[u8] = include_bytes!(concat!(
     "/assets/typewritter_icon_disabled.png"
 ));
 
+const APP_NAME: &str = "Daktilo Tray";
+const AUTOSTART_SMOKE_ENV: &str = "DAKTILO_AUTOSTART_ONLY";
+
 enum EventKind {
     KeyEvent(rdev::Event),
     ChangeConfig {
@@ -47,6 +50,21 @@ fn main() {
         .with(tracing_subscriber::EnvFilter::from_default_env())
         .init();
 
+    if std::env::var_os(AUTOSTART_SMOKE_ENV).is_some() {
+        match run_autostart_probe() {
+            Ok(_) => {
+                tracing::info!(
+                    "Autostart smoke mode set default preference; exiting without starting UI."
+                );
+                return;
+            }
+            Err(err) => {
+                tracing::error!("Autostart smoke mode failed: {err}");
+                std::process::exit(1);
+            }
+        }
+    }
+
     let config = EmbeddedConfig::parse().unwrap();
     let presets = config.sound_presets;
     let devices = audio::get_devices().expect("Fail to get computer audio devices");
@@ -66,7 +84,7 @@ fn main() {
     if !restored_from_cache {
         state.run_on_login = autostart_defaults.default_enabled;
     }
-    let autostart_controller = AutostartController::new("Daktilo Tray");
+    let autostart_controller = AutostartController::new(APP_NAME);
     let mut autostart_available = autostart_controller.is_available();
     if autostart_available {
         match autostart_controller.is_enabled() {
@@ -357,6 +375,28 @@ fn default_state(default_device_name: &str) -> State {
         current_preset_name: String::from("default"),
         current_device_name: default_device_name.to_string(),
         run_on_login: false,
+    }
+}
+
+fn run_autostart_probe() -> Result<(), String> {
+    let defaults = AutostartDefaults::load();
+    let desired = defaults.default_enabled;
+    let controller = AutostartController::new(APP_NAME);
+    if !controller.is_available() {
+        return Err("Autostart is not supported on this platform".to_string());
+    }
+    controller
+        .set_enabled(desired)
+        .map_err(|err| format!("Failed to set autostart preference: {err}"))?;
+    match controller.is_enabled() {
+        Ok(state) if state == desired => {
+            tracing::debug!("Autostart verified -> {}", desired);
+            Ok(())
+        }
+        Ok(state) => Err(format!(
+            "Autostart verification mismatch. Expected {desired}, observed {state}"
+        )),
+        Err(err) => Err(format!("Failed to verify autostart state: {err}")),
     }
 }
 

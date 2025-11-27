@@ -3,11 +3,16 @@ param(
     [Parameter(Mandatory = $true)][string]$PfxPassword,
     [string]$Repo,
     [string]$EnvFile = ".\.codesign.env",
-    [switch]$SkipGitHubSecrets
+    [switch]$SkipGitHubSecrets,
+    [string]$Environment
 )
 
 if (-not (Test-Path $PfxPath)) {
     throw "PFX file not found: $PfxPath"
+}
+
+if ($Environment -and -not $Repo) {
+    throw "-Environment requires -Repo so gh secret set knows which repository to target."
 }
 
 $pfxFullPath = (Resolve-Path $PfxPath).Path
@@ -21,6 +26,9 @@ if (-not $SkipGitHubSecrets) {
     $secretTargets = @()
     if ($Repo) {
         $secretTargets += @("--repo", $Repo)
+    }
+    if ($Environment) {
+        $secretTargets += @("--env", $Environment)
     }
 
     Write-Host "Publishing WINDOWS_CODESIGN_PFX secret via gh..."

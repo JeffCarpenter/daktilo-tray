@@ -15,7 +15,8 @@ cargo install daktilo-tray
 
 ## Launch at Login
 - Toggle the new **Launch Daktilo Tray at login** checkbox from the tray menu to register or remove the app from the OS startup list. The preference is cached next to the rest of the tray state so it survives restarts.
-- The default behavior for fresh installs is sourced from `dist-workspace.toml` under `[workspace.metadata.dist.autostart]`. This keeps the runtime and cargo-dist release metadata in sync—flip `default_enabled` there if you want installers to opt users in or out by default, then rebuild.
+- The default behavior for fresh installs is sourced from `dist-workspace.toml` under `[workspace.metadata.dist.autostart]`. This keeps the runtime and cargo-dist release metadata in sync-flip `default_enabled` there if you want installers to opt users in or out by default, then rebuild.
+- Automation and smoke tests can set `DAKTILO_AUTOSTART_ONLY=1` before launching the installed binary; the app will apply the metadata default to the registry, verify it, and exit immediately (no tray/threads are spawned). `scripts/test-installer.ps1` relies on this path to validate MSIs inside CI.
 
 ## Code Signing
 - Releases are built with `cargo-dist`'s MSI pipeline and a follow-up PowerShell script (`scripts/sign-windows.ps1`) that runs `signtool.exe` over every `.exe` and `.msi` artifact. Add these GitHub Actions secrets so CI can import your certificate: `WINDOWS_CODESIGN_PFX` (base64-encoded PFX blob) and `WINDOWS_CODESIGN_PASSWORD` (the PFX password). The workflow skips signing automatically if either secret is absent, which keeps unsigned PR builds trivial.
@@ -33,7 +34,7 @@ cargo install daktilo-tray
 - **Manual variants**:
   - `scripts/bootstrap-codesign.ps1` (export + secret publication only) and `scripts/prepare-codesign-secrets.ps1` (already have a `.pfx` file) remain available if you need granular control.
   - `scripts/sign-windows.ps1` can be called directly with `-PfxBase64`/`-PfxPassword` to sign arbitrary artifacts immediately after `dist build --installer msi`.
-- **Channel-aware defaults**: `[workspace.metadata.dist.codesign.channels.*]` in `dist-workspace.toml` describe certificate stores, selectors, and env snapshots for each track (`dev`, `stable`, ...). Pass `-Channel` to `scripts/release-windows.ps1` so it auto-selects the right cert and resolves `signtool.exe` from the Windows SDK even when it is not on `PATH`.
+- **Channel-aware defaults**: `[workspace.metadata.dist.codesign.channels.*]` in `dist-workspace.toml` describe certificate stores, selectors, env files, and now GitHub routing fields per track (`dev`, `stable`, ...). Pass `-Channel` to `scripts/release-windows.ps1` so it auto-selects the right cert, targets the right repo/environment for `gh secret set`, and resolves `signtool.exe` from the Windows SDK even when it is not on `PATH`.
 - **Dev/test certificates without a paid CA**: `scripts/provision-dev-cert.ps1` mints a short-lived self-signed code-signing certificate via `New-SelfSignedCertificate`, exports it to a temporary PFX, and reuses `prepare-codesign-secrets.ps1` so GitHub secrets + `.codesign.env` stay in sync. Example:
   ```powershell
   pwsh scripts/provision-dev-cert.ps1 `
@@ -42,6 +43,10 @@ cargo install daktilo-tray
     -Repo yourorg/daktilo-tray
   ```
   Windows will not trust self-signed signatures by default-use this flow for local smoke tests while you work with a publicly trusted CA for release builds. Pass `-SkipGitHubSecrets` if you only want the local `.codesign.env` updated.
+
+## Installer Smoke Tests
+- `scripts/test-installer.ps1 -ArtifactsDir <path>` installs the freshly built MSI, launches the installed tray binary with `DAKTILO_AUTOSTART_ONLY=1`, checks that the HKCU `Run` entry matches `[workspace.metadata.dist.autostart.default_enabled]`, runs `signtool verify /pa /v` on the MSI, uninstalls, and stashes logs under `target/smoke-tests/`.
+- `.github/workflows/release.yml` now includes an `installer-smoke` job that downloads the Windows artifacts, runs the helper, uploads the logs, and blocks release publishing if the MSI fails to install, set autostart, or verify its signature.
 
 # Supply-chain Guardrails
 - CI installs `cargo-pants` and runs `scripts/run-cargo-pants.ps1`, which captures the CLI output, inspects every `CVSS Score`, and only fails the Windows release job when the maximum score meets the threshold published in `dist-workspace.toml` (`[workspace.metadata.dist.supply_chain]`).
@@ -66,6 +71,7 @@ cargo install daktilo-tray
   ```
 - If you built Caddy with the Cloudflare DNS module, append `-DnsProvider cloudflare -CloudflareApiToken $env:CLOUDFLARE_API_TOKEN` to satisfy DNS-01 via Cloudflare instead of HTTP-01. Remember Let's Encrypt certificates cover TLS-not code signing-so feed the resulting PFX into your higher-trust workflow or keep using `scripts/provision-dev-cert.ps1` for local smoke tests.
 - Want an automated, auditable run? Trigger the **Request ACME PFX** workflow in GitHub (manual dispatch). It installs Caddy on a Windows runner, calls `scripts/request-acme-pfx.ps1` with your domains/email, optionally feeds Cloudflare DNS tokens, and uploads both the PFX and pre-formatted `.env` snapshot as a one-click artifact for operators.
+- That workflow now accepts an `environment_name` input; the job binds to that GitHub environment (so approvals apply) and immediately runs `gh secret set --env <name>` for `WINDOWS_CODESIGN_PFX`/`WINDOWS_CODESIGN_PASSWORD`, keeping the release wizard in sync without copying secrets by hand.
 
 # Roadmap
 - [X] Change preset in realtime
