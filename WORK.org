@@ -125,7 +125,7 @@
 * Forward Plan
 :PROPERTIES:
 :owner: Codex
-:last_reviewed: 2025-11-27T22:30:00-06:00
+:last_reviewed: 2025-11-27T23:50:00-06:00
 :intent: Hardening + coverage
 :END:
 ** Automation Worklist
@@ -138,14 +138,16 @@
 - [X] *ACME workflow hardening*: wrap `acme-pfx.yml` in a protected GitHub environment with approvals and auto-promote the emitted `.env` snapshot into environment secrets for the release wizard.
 - [X] *Built-in reporting*: added the `scripts/run-coverage.ps1` helper that emits LCOV/HTML/JSON, rolls the coverage+test deltas into summary.md, and appends the Markdown directly to `$GITHUB_STEP_SUMMARY` when available.
 - [X] *JUnit plumbing*: wired `dorny/test-reporter@v2` into `.github/workflows/coverage.yml` so the generated `target/test-results/junit.xml` feeds structured test annotations on every PR, with fork-friendly `fail-on-empty` semantics captured in docs.
+- [ ] *Release workflow parity*: reconcile `.github/workflows/release.yml` with cargo-dist's generated template so `dist build --installer msi` no longer needs `--allow-dirty` while preserving our cargo-pants + signtool + smoke jobs.
 ** Coverage Roadmap
 :PROPERTIES:
-:status: planning
-:tools: cargo-llvm-cov, grcov
+:status: in_review
+:tools: cargo-llvm-cov, grcov, codecov
 :END:
-- ?? *Codecov uplink*: feed `target/coverage/lcov.info` into Codecov (or equivalent) once tokens land so reviewers see deltas inline.
-- ?? *Budget enforcement*: snapshot the current coverage % and fail the coverage job if new commits dip below the agreed floor (allow per-channel overrides if needed).
-- ?? *HTML publishing*: surface the generated coverage HTML via Pages or PR comments so contributors can inspect hit/miss heatmaps without downloading artifacts.
+- [X] *Codecov uplink*: `codecov/codecov-action@v4` now ingests `target/coverage/lcov.info` from the coverage job (token optional for public repos, secret `CODECOV_TOKEN` documented for private forks).
+- [X] *Budget enforcement*: `scripts/run-coverage.ps1 -EnforceBaseline` compares each metric against `[workspace.metadata.dist.coverage.baseline]`, honors an optional `tolerance`, and fails CI if coverage dips below the stored floor.
+- [X] *HTML publishing*: coverage HTML is uploaded as a Pages artifact on `main` pushes, and `publish-coverage` deploys it to the `coverage-site` environment so contributors can browse hit/miss diffs without downloading artifacts.
+- [ ] *Coverage deltas in PR comments*: follow-up to mirror the Pages URL + key deltas into PR comments for better discoverability.
 *** 2025-11-27T20:05:00-06:00 Research refresh
 - Re-read AreWeWebYet's cryptography status board; it still lists battle-tested TLS/lib crates (ring, rustls, libsodium bindings) as "+" so leaning on them for signing helpers remains low risk.
 - GitHub API still shows RustCrypto core repos (hashes, AEADs, block-ciphers, elliptic-curves, password-hashes) active within 24h; star/issue counts confirm we are leaning on well-maintained crates.
@@ -170,5 +172,10 @@
 - Re-ran `dist init --yes` (which already shells out to `dist generate`) to confirm our workspace metadata stays compatible with cargo-dist 0.30.x; reverted the generated workflow afterwards to preserve our custom cargo-pants, signtool, and installer-smoke steps.
 - Verified that `dist generate --artifacts local` is no longer a valid flag set (CLI rejected it), so noted the mismatch here for future operators.
 - Executed `dist generate` and `dist build --installer msi --allow-dirty` manually; build succeeded after acknowledging the intentional workflow drift and produced fresh MSI/ZIP artifacts plus sha256 sums under `target/distrib/`.
+** 2025-11-27T23:45:00-06:00 Coverage budget + publishing
+- Added `tolerance` metadata plus the `-EnforceBaseline` path to `scripts/run-coverage.ps1`; the helper now returns structured stats, enforces the stored baseline, and surfaces the allowed drop inside summary.md so deviations are obvious.
+- Taught `.github/workflows/coverage.yml` to call the helper with enforcement enabled, upload LCOV to Codecov, feed HTML into GitHub Pages, and gate deployments behind a new `publish-coverage` job bound to a `coverage-site` environment.
+- Documented the new knobs (baseline, tolerance, Codecov secret, Pages URL) in HACKING.org and checked `target/coverage/summary.md`/GitHub Step Summary output locally to ensure the failure path is exercised when baselines shrink.
+- Follow-up captured above: wire PR comment bots once Codecov tokens land and scope the work needed to reconcile our release workflow with upstream cargo-dist templates so `dist build` can drop `--allow-dirty`.
 
 

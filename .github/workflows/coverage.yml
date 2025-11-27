@@ -28,7 +28,7 @@ jobs:
           save-if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository || github.event_name != 'pull_request' }}
       - name: Run coverage and tests
         shell: pwsh
-        run: ./scripts/run-coverage.ps1 -HtmlReport -GenerateJUnit -AppendToStepSummary
+        run: ./scripts/run-coverage.ps1 -HtmlReport -GenerateJUnit -AppendToStepSummary -EnforceBaseline
       - name: Publish structured test report
         if: always()
         uses: dorny/test-reporter@v2
@@ -51,6 +51,20 @@ jobs:
           if ($code -ne 0) {
             throw "cargo test exited with code $code"
           }
+      - name: Upload coverage to Codecov
+        if: success()
+        uses: codecov/codecov-action@v4
+        with:
+          files: target/coverage/lcov.info
+          flags: windows
+          disable_search: true
+          fail_ci_if_error: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+      - name: Upload coverage site artifact
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: target/coverage/html
       - name: Upload coverage artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -59,3 +73,17 @@ jobs:
             target/coverage
             target/test-results
           retention-days: 7
+  publish-coverage:
+    runs-on: ubuntu-latest
+    needs: coverage
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: coverage-site
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy GitHub Pages site
+        id: deployment
+        uses: actions/deploy-pages@v4

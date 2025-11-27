@@ -4,6 +4,7 @@ param(
     [switch]$GenerateJUnit,
     [string]$JUnitDir = "target/test-results",
     [switch]$AppendToStepSummary,
+    [switch]$EnforceBaseline,
     [string]$DistMetadataPath = "dist-workspace.toml"
 )
 
@@ -25,12 +26,55 @@ function ConvertFrom-TomlFile {
         Write-Warning "python not found; skipping TOML metadata parsing"
         return $null
     }
-    $pythonScript = 'import json, pathlib, sys, tomllib; path = pathlib.Path(sys.argv[1]); data = tomllib.loads(path.read_text(encoding="utf-8")); json.dump(data, sys.stdout)'
+    $pythonScript = @"
+import json, pathlib, sys
+try:
+    import tomllib  # py311+
+except ModuleNotFoundError:
+    try:
+        import tomli as tomllib  # py310 fallback
+    except ModuleNotFoundError as exc:
+        sys.stderr.write("Missing tomllib/tomli modules: %s\n" % exc)
+        sys.exit(1)
+path = pathlib.Path(sys.argv[1])
+data = tomllib.loads(path.read_text(encoding="utf-8"))
+json.dump(data, sys.stdout)
+"@
     $json = & python -c $pythonScript $Path
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warning "python failed to parse $Path (exit $LASTEXITCODE)"
+        return $null
+    }
     if (-not $json) {
         return $null
     }
     return $json | ConvertFrom-Json
+}
+
+function Get-NestedValue {
+    param(
+        $Object,
+        [string[]]$Path
+    )
+    $current = $Object
+    foreach ($segment in $Path) {
+        if (-not $current) {
+            return $null
+        }
+        if ($current.PSObject.Properties.Match($segment).Count -eq 0) {
+            return $null
+        }
+        $current = $current.$segment
+    }
+    return $current
+}
+
+function Get-BaselineValue {
+    param($BaselineTable, [string]$Metric)
+    if ($BaselineTable -and $BaselineTable.PSObject.Properties.Name -contains $Metric) {
+        return [double]$BaselineTable.$Metric
+    }
+    return 0.0
 }
 
 function Accumulate-Metric {
@@ -60,6 +104,28 @@ function Format-Delta {
     $rounded = [math]::Round($Value, 2)
     $sign = if ($rounded -ge 0) { "+" } else { "" }
     return "{0}{1}%" -f $sign, $rounded
+}
+
+function Assert-CoverageBudget {
+    param(
+        $CoverageEntries,
+        $Baseline,
+        [double]$Tolerance = 0.0
+    )
+    if (-not $Baseline) {
+        Write-Warning "Coverage baseline missing; skipping enforcement"
+        return
+    }
+    foreach ($entry in $CoverageEntries) {
+        $baselineValue = Get-BaselineValue -BaselineTable $Baseline -Metric $entry.Key
+        if ($baselineValue -le 0) {
+            continue
+        }
+        $actual = [double]$entry.Stats.percent
+        if (($actual + $Tolerance) -lt $baselineValue) {
+            throw "Coverage budget violated for $($entry.Name): $actual% < baseline $baselineValue% (tolerance ${Tolerance}%)"
+        }
+    }
 }
 
 function Invoke-TestRun {
@@ -141,14 +207,19 @@ function Write-CoverageSummary {
     $functionStats = Accumulate-Metric -Data $data -Metric "functions"
 
     $metadata = ConvertFrom-TomlFile -Path $DistMetadataPath
-    $baseline = $metadata?.workspace?.metadata?.dist?.coverage?.baseline
-
-    function Get-BaselineValue {
-        param($BaselineTable, [string]$Metric)
-        if ($BaselineTable -and $BaselineTable.PSObject.Properties.Name -contains $Metric) {
-            return [double]$BaselineTable.$Metric
-        }
-        return 0.0
+    if (-not $metadata) {
+        Write-Warning "dist metadata unavailable at $DistMetadataPath; coverage baseline + tolerance disabled"
+    }
+    $coverageConfig = Get-NestedValue -Object $metadata -Path @("workspace","metadata","dist","coverage")
+    if ($coverageConfig) {
+        Write-Verbose ("Coverage config: {0}" -f (ConvertTo-Json $coverageConfig -Compress -Depth 8))
+    } else {
+        Write-Warning "coverage metadata missing under workspace.metadata.dist.coverage"
+    }
+    $baseline = Get-NestedValue -Object $metadata -Path @("workspace","metadata","dist","coverage","baseline")
+    $coverageTolerance = 0.0
+    if ($coverageConfig -and $coverageConfig.PSObject.Properties.Name -contains "tolerance") {
+        $coverageTolerance = [double]$coverageConfig.tolerance
     }
 
     $lines = New-Object System.Collections.Generic.List[string]
@@ -180,6 +251,9 @@ function Write-CoverageSummary {
     $lines.Add("")
     if ($baseline) {
         $lines.Add("Baseline source: dist-workspace.toml")
+        if ($coverageTolerance -gt 0) {
+            $lines.Add("Allowed drop before failure: ${coverageTolerance}%")
+        }
         $lines.Add("")
     }
 
@@ -252,6 +326,12 @@ function Write-CoverageSummary {
     } elseif ($AppendToStepSummary) {
         Write-Warning "GITHUB_STEP_SUMMARY not set; skipping append"
     }
+
+    return [ordered]@{
+        CoverageEntries = $coverageEntries
+        Baseline = $baseline
+        Tolerance = $coverageTolerance
+    }
 }
 
 Require-Command -Name "cargo" -InstallHint "Install Rust via https://rustup.rs/."
@@ -301,13 +381,20 @@ if ($GenerateJUnit) {
     $testResult = Invoke-TestRun -OutputDir $JUnitDir -JUnitPath $JUnitPath -ExitCodePath $testExitPath
 }
 
-Write-CoverageSummary `
+$summaryResult = Write-CoverageSummary `
     -SummaryJsonPath $jsonSummaryPath `
     -MarkdownPath $summaryMarkdownPath `
     -DistMetadataPath $DistMetadataPath `
     -JUnitPath $testResult.JunitPath `
     -ExitCodePath $testResult.ExitCodePath `
     -AppendToStepSummary:$AppendToStepSummary
+
+if ($EnforceBaseline) {
+    Assert-CoverageBudget `
+        -CoverageEntries $summaryResult.CoverageEntries `
+        -Baseline $summaryResult.Baseline `
+        -Tolerance $summaryResult.Tolerance
+}
 
 Write-Host "Coverage artifacts written to $OutputDir"
 if ($GenerateJUnit) {

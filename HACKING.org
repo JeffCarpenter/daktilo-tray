@@ -97,7 +97,10 @@ pwsh scripts/release-windows.ps1 -SkipSecrets -Repo yourorg/daktilo-tray -PfxPas
 
 ** Coverage drill
 - Install `cargo-llvm-cov` and `cargo2junit` (`cargo install cargo-llvm-cov --locked && cargo install cargo2junit --locked`), then run `pwsh scripts/run-coverage.ps1 -HtmlReport -GenerateJUnit -AppendToStepSummary` to clean instrumentation, execute the workspace, and emit the LCOV/HTML/JUnit/exit-code bundle under `target/coverage` and `target/test-results`.
-- `.github/workflows/coverage.yml` calls the same helper on `windows-latest`, feeds the generated JUnit file into `dorny/test-reporter@v2` for PR annotations, appends the Markdown summary to `$GITHUB_STEP_SUMMARY`, and uploads the combined artifact so you can drill into LCOV/HTML/JUnit locally. Keep the summary lean so it stays under GitHub's 1 MiB per-step limit.
+- Pass `-EnforceBaseline` locally to mirror CI behavior; the helper reads `[workspace.metadata.dist.coverage.baseline]`, applies the optional `tolerance`, and fails when coverage dips below the stored floor. Update the baseline (and tolerance) inside `dist-workspace.toml` whenever you intentionally raise expectations.
+- `.github/workflows/coverage.yml` calls the same helper on `windows-latest`, feeds the generated JUnit file into `dorny/test-reporter@v2` for PR annotations, appends the Markdown summary to `$GITHUB_STEP_SUMMARY`, mouths the LCOV into Codecov (`CODECOV_TOKEN` secret required for private forks), and uploads the combined artifact so you can drill into LCOV/HTML/JUnit locally.
+- Main-branch pushes also upload `target/coverage/html` via `actions/upload-pages-artifact`; the follow-on `publish-coverage` job deploys it to the `coverage-site` GitHub Pages environment so you can browse hit/miss diffs without downloading artifacts. Grab the URL from the deployment badge or the job summary.
+- Keep the summary lean so it stays under GitHub's 1 MiB per-step limit, and rotate the baseline whenever we add meaningful tests so the enforcement step remains signalful.
 
 * Dist + Packaging Notes
 - `dist-workspace.toml` is the authoritative source for installers and targets; keep `targets` trimmed to what you can sign.
