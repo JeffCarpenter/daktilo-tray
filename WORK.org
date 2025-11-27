@@ -125,7 +125,7 @@
 * Forward Plan
 :PROPERTIES:
 :owner: Codex
-:last_reviewed: 2025-11-27T21:00:00-06:00
+:last_reviewed: 2025-11-27T22:30:00-06:00
 :intent: Hardening + coverage
 :END:
 ** Automation Worklist
@@ -136,8 +136,8 @@
 - [X] *Secret routing*: teach `scripts/release-windows.ps1` to read its `-Repo`/`-EnvFile` target from `[workspace.metadata.dist.codesign.channels.*]` so channel metadata drives the entire `gh secret set` story.
 - [X] *Installer smoke tests*: add a Windows CI job that installs the freshly signed MSI, confirms the autostart registry entries honor channel defaults, and captures `signtool verify` output for each artifact.
 - [X] *ACME workflow hardening*: wrap `acme-pfx.yml` in a protected GitHub environment with approvals and auto-promote the emitted `.env` snapshot into environment secrets for the release wizard.
-- ?? *Built-in reporting*: add a reusable PowerShell helper that turns `cargo llvm-cov --json` + test logs into a Markdown block appended to `$GITHUB_STEP_SUMMARY`, staying under the documented per-step size limits while surfacing pass/fail counts and coverage deltas inline.
-- ?? *JUnit plumbing*: pilot `dorny/test-reporter@v2` (or CTRF) on Windows runs so PRs get rich test status checks without third-party dashboards; confirm artifact permissions for forked PRs and document the limitations + required workflow separation.
+- [X] *Built-in reporting*: added the `scripts/run-coverage.ps1` helper that emits LCOV/HTML/JSON, rolls the coverage+test deltas into summary.md, and appends the Markdown directly to `$GITHUB_STEP_SUMMARY` when available.
+- [X] *JUnit plumbing*: wired `dorny/test-reporter@v2` into `.github/workflows/coverage.yml` so the generated `target/test-results/junit.xml` feeds structured test annotations on every PR, with fork-friendly `fail-on-empty` semantics captured in docs.
 ** Coverage Roadmap
 :PROPERTIES:
 :status: planning
@@ -166,4 +166,9 @@
 - Rebuilt scripts/run-coverage.ps1 so a single invocation handles LCOV/HTML generation, JUnit export (via cargo2junit), exit-code capture, and Markdown rendering tied back to the new dist metadata baseline.
 - Updated .github/workflows/coverage.yml to install cargo2junit, run the helper with -GenerateJUnit/-AppendToStepSummary, feed the resulting junit.xml into dorny/test-reporter@v2, and gate the job on the recorded exit code before uploading artifacts.
 - Touched README.md + HACKING.org so contributors know to pass -GenerateJUnit locally and understand why the workflow now surfaces test summaries via $GITHUB_STEP_SUMMARY instead of ad-hoc log scraping.
+** 2025-11-27T22:30:00-06:00 Dist regeneration + build rehearsal
+- Re-ran `dist init --yes` (which already shells out to `dist generate`) to confirm our workspace metadata stays compatible with cargo-dist 0.30.x; reverted the generated workflow afterwards to preserve our custom cargo-pants, signtool, and installer-smoke steps.
+- Verified that `dist generate --artifacts local` is no longer a valid flag set (CLI rejected it), so noted the mismatch here for future operators.
+- Executed `dist generate` and `dist build --installer msi --allow-dirty` manually; build succeeded after acknowledging the intentional workflow drift and produced fresh MSI/ZIP artifacts plus sha256 sums under `target/distrib/`.
+
 
