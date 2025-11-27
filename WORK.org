@@ -114,6 +114,13 @@
 ** 2025-11-27T18:45:00-06:00 Coverage automation
 - Introduced `scripts/run-coverage.ps1` (wraps `cargo llvm-cov`, emits LCOV + optional HTML, fails fast if prerequisites or outputs are missing) and wired it into `.github/workflows/coverage.yml` on `windows-latest` (installs llvm-tools + cargo-llvm-cov, uploads `target/coverage` artifacts).
 - Added contributor guidance + README notes describing how to run the helper locally and interpret the uploaded LCOV bundle; the coverage workflow now runs on every PR + `main` push so regressions are visible before signing artifacts.
+** 2025-11-27T19:35:00-06:00 Coverage summaries + reporters
+- Extended `scripts/run-coverage.ps1` to emit LCOV + HTML + JSON in one go, crunch totals into `target/coverage/summary.md`, and document the same table in README/HACKING. The coverage workflow now pushes that Markdown straight into `$GITHUB_STEP_SUMMARY` so reviewers see headline numbers without fetching artifacts.
+- Sketched the next reporting layer by reviewing `dorny/test-reporter`’s CTRF/JUnit ingestion model; queued a follow-up to pilot it on Windows runners once we emit structured test outputs so PRs get richer status checks without extra tooling.
+** 2025-11-27T19:10:00-06:00 Test summary RTFM
+- Re-read GitHub’s official workflow-command guide to confirm how `$GITHUB_STEP_SUMMARY` aggregates Markdown per step/job, the 1 MiB per-step quota, and the 20-summary display cap so we can lean on built-in rendering instead of ad-hoc log scraping.
+- Surveyed maintained Actions that already emit structured checks/summaries (notably `dorny/test-reporter@v2` and `ctrf-io/github-test-reporter@v1`) to understand how they pipe JUnit/CTRF artifacts into job summaries, PR comments, and status checks.
+- Captured the takeaway that we should (a) emit our own Markdown summary for coverage deltas directly in the coverage job, and (b) evaluate whether an off-the-shelf reporter can own the test summary UX or whether we need a thin wrapper around `$GITHUB_STEP_SUMMARY`.
 
 * Forward Plan
 :PROPERTIES:
@@ -129,6 +136,8 @@
 - ?? *Secret routing*: teach `scripts/release-windows.ps1` to read its `-Repo`/`-EnvFile` target from `[workspace.metadata.dist.codesign.channels.*]` so channel metadata drives the entire `gh secret set` story.
 - ?? *Installer smoke tests*: add a Windows CI job that installs the freshly signed MSI, confirms the autostart registry entries honor channel defaults, and captures `signtool verify` output for each artifact.
 - ?? *ACME workflow hardening*: wrap `acme-pfx.yml` in a protected GitHub environment with approvals and auto-promote the emitted `.env` snapshot into environment secrets for the release wizard.
+- ?? *Built-in reporting*: add a reusable PowerShell helper that turns `cargo llvm-cov --json` + test logs into a Markdown block appended to `$GITHUB_STEP_SUMMARY`, staying under the documented per-step size limits while surfacing pass/fail counts and coverage deltas inline.
+- ?? *JUnit plumbing*: pilot `dorny/test-reporter@v2` (or CTRF) on Windows runs so PRs get rich test status checks without third-party dashboards; confirm artifact permissions for forked PRs and document the limitations + required workflow separation.
 ** Coverage Roadmap
 :PROPERTIES:
 :status: planning

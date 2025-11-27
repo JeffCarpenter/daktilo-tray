@@ -90,7 +90,7 @@ pwsh scripts/release-windows.ps1 -SkipSecrets -Repo yourorg/daktilo-tray -PfxPas
 
 ** Coverage drill
 - Install `cargo-llvm-cov` (`cargo install cargo-llvm-cov --locked`), then run `pwsh scripts/run-coverage.ps1 -HtmlReport` to reset instrumentation, execute the workspace, and emit both `target/coverage/lcov.info` and an HTML dashboard under `target/coverage/html`.
-- `.github/workflows/coverage.yml` executes the same helper on every PR + `main` push and uploads the coverage folder as an artifact so reviewers can diff deltas or feed the LCOV file into Codecov/coveralls later.
+- `.github/workflows/coverage.yml` executes the same helper on every PR + `main` push, uploads the coverage folder as an artifact, and streams a Markdown snapshot into `$GITHUB_STEP_SUMMARY` so you can review headline numbers without downloading artifacts. Keep each summary under the 1 MiB GitHub limit by sticking to the generated table.
 
 * Dist + Packaging Notes
 - `dist-workspace.toml` is the authoritative source for installers and targets; keep `targets` trimmed to what you can sign.

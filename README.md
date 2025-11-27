@@ -52,6 +52,7 @@ cargo install daktilo-tray
 # Coverage
 - Run `pwsh scripts/run-coverage.ps1 -HtmlReport` to produce `target/coverage/lcov.info` plus an HTML dashboard (under `target/coverage/html`) via `cargo llvm-cov`. The helper ensures `cargo-llvm-cov` is installed, cleans stale instrumentation, and fails fast if the LCOV output is missing.
 - `.github/workflows/coverage.yml` executes the same helper on `windows-latest` for every PR and `main` push. Review the uploaded artifact (`coverage-<run-id>`) to inspect LCOV/HTML outputs or forward the LCOV file to Codecov/coveralls if you add tokens later.
+- Each run also appends a Markdown snippet to the GitHub job summary via `$GITHUB_STEP_SUMMARY`, so coverage deltas are visible directly in the Actions UI (GitHub caps summaries at 1 MiB per step, which our helper stays well under). citeturn0search6
 
 # ACME Bootstrap / Let's Encrypt + Caddy
 - `scripts/request-acme-pfx.ps1` automates spinning up `caddy run`, acquiring a Let's Encrypt (or staging) TLS certificate for `sign.yourdomain.com`, and writing a password-protected PFX you can stash as part of your release secrets. This is ideal for staging and for proving domain control to a commercial Authenticode CA.

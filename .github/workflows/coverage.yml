@@ -26,6 +26,16 @@ jobs:
       - name: Run coverage
         shell: pwsh
         run: ./scripts/run-coverage.ps1 -HtmlReport
+      - name: Publish coverage summary
+        if: always()
+        shell: pwsh
+        run: |
+          $summaryPath = Join-Path $PWD "target/coverage/summary.md"
+          if (Test-Path $summaryPath) {
+            Get-Content $summaryPath | Out-String >> $env:GITHUB_STEP_SUMMARY
+          } else {
+            "Coverage summary missing at $summaryPath" >> $env:GITHUB_STEP_SUMMARY
+          }
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
         with:
