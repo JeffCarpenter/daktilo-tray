@@ -1,10 +1,25 @@
+[workspace]
+members = ["cargo:."]
+
 [workspace.metadata.dist]
-cargo-dist-version = "0.25.0"
+cargo-dist-version = "0.30.2"
 ci = ["github"]
 installers = ["powershell", "shell", "msi"]
 targets = ["x86_64-pc-windows-msvc"]
+ssldotcom-windows-sign = "prod"
 
 [workspace.metadata.dist.autostart]
 default_enabled = true
 menu_label = "Launch Daktilo Tray at login"
 tooltip = "Default run-on-login preference consumed by the tray UI and installers."
+
+# Config for 'dist'
+[dist]
+# The preferred dist version to use in CI (Cargo.toml SemVer syntax)
+cargo-dist-version = "0.30.2"
+# CI backends to support
+ci = "github"
+# The installers to generate for each app
+installers = ["msi"]
+# Target platforms to build apps for (Rust target-triple syntax)
+targets = ["x86_64-pc-windows-msvc"]

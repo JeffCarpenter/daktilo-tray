@@ -23,13 +23,13 @@
 2. Implement runtime autostart manager + tray menu toggle; persist state.
 3. Wire release metadata + README/docs so cargo-dist builds know about the feature.
 ** Task Breakdown
-- [ ] Parse `dist-workspace.toml` for `[workspace.metadata.dist.autostart]` defaults (fallback to safe values if missing).
-- [ ] Create `AutostartController` abstraction using `auto-launch` (only instantiate on supported OS) that exposes `current()` and `set(bool)`.
-- [ ] Extend cached `State` with `run_on_login` and serialize.
-- [ ] Add tray checkbox + event handling that syncs UI, `State`, controller errors, and logs.
-- [ ] Persist updated state on exit along with new field.
-- [ ] Update Cargo manifest (dependencies + metadata) and add `dist-workspace.toml` capturing release knobs + human-friendly copy.
-- [ ] Document feature in README (usage + how to set default via dist config) and recap changes here once done.
+- [X] Parse `dist-workspace.toml` for `[workspace.metadata.dist.autostart]` defaults (fallback to safe values if missing).
+- [X] Create `AutostartController` abstraction using `auto-launch` (only instantiate on supported OS) that exposes `current()` and `set(bool)`.
+- [X] Extend cached `State` with `run_on_login` and serialize.
+- [X] Add tray checkbox + event handling that syncs UI, `State`, controller errors, and logs.
+- [X] Persist updated state on exit along with new field.
+- [X] Update Cargo manifest (dependencies + metadata) and add `dist-workspace.toml` capturing release knobs + human-friendly copy.
+- [X] Document feature in README (usage + how to set default via dist config) and recap changes here once done.
 
 * Log
 ** 2025-11-27T10:15:00-06:00 Kickoff
@@ -37,3 +37,6 @@
 ** 2025-11-27T11:05:00-06:00 Implementation
 - Added auto-launch integration, state persistence, and tray toggle; default wiring reads from dist-workspace.toml.
 - Created dist-workspace metadata + README instructions; ran `cargo fmt` + `cargo check` (warnings only from upstream). 
+** 2025-11-27T12:00:00-06:00 Signing
+- Enabled SSL.com-backed signing via `ssldotcom-windows-sign = "prod"`, refreshed dist artifacts, and documented required GitHub secrets + local signtool workflow.
+- Regenerated release CI, provisioned WiX locally, and ran `dist build --installer msi` to validate the pipeline end-to-end.
