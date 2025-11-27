@@ -112,10 +112,6 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       BUILD_MANIFEST_NAME: target/distrib/${{ join(matrix.targets, '-') }}-dist-manifest.json
-      SSLDOTCOM_USERNAME: ${{ secrets.SSLDOTCOM_USERNAME }}
-      SSLDOTCOM_PASSWORD: ${{ secrets.SSLDOTCOM_PASSWORD }}
-      SSLDOTCOM_TOTP_SECRET: ${{ secrets.SSLDOTCOM_TOTP_SECRET }}
-      SSLDOTCOM_CREDENTIAL_ID: ${{ secrets.SSLDOTCOM_CREDENTIAL_ID }}
     steps:
       - name: enable windows longpaths
         run: |
@@ -148,6 +144,22 @@ jobs:
           # Actually do builds and make zips and whatnot
           dist build ${{ needs.plan.outputs.tag-flag }} --print=linkage --output-format=json ${{ matrix.dist_args }} > dist-manifest.json
           echo "dist ran successfully"
+      - name: Sign Windows artifacts
+        if: contains(matrix.targets, 'pc-windows')
+        shell: pwsh
+        env:
+          WINDOWS_CODESIGN_PFX: ${{ secrets.WINDOWS_CODESIGN_PFX }}
+          WINDOWS_CODESIGN_PASSWORD: ${{ secrets.WINDOWS_CODESIGN_PASSWORD }}
+        run: |
+          if (-not $env:WINDOWS_CODESIGN_PFX -or -not $env:WINDOWS_CODESIGN_PASSWORD) {
+            Write-Host "Codesign secrets missing; skipping signtool step."
+            exit 0
+          }
+          & "$PWD/scripts/sign-windows.ps1" `
+            -ArtifactsDir "target/distrib" `
+            -BinaryDir "target/dist" `
+            -PfxBase64 $env:WINDOWS_CODESIGN_PFX `
+            -PfxPassword $env:WINDOWS_CODESIGN_PASSWORD
       - id: cargo-dist
         name: Post-build
         # We force bash here just because github makes it really hard to get values up

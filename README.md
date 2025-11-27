@@ -18,8 +18,8 @@ cargo install daktilo-tray
 - The default behavior for fresh installs is sourced from `dist-workspace.toml` under `[workspace.metadata.dist.autostart]`. This keeps the runtime and cargo-dist release metadata in sync—flip `default_enabled` there if you want installers to opt users in or out by default, then rebuild.
 
 ## Code Signing
-- Releases are built with `cargo-dist`'s MSI pipeline and the GitHub Actions workflow is wired to call SSL.com's Signing-as-a-Service so Windows sees the binaries as first-party. Add the following GitHub Actions secrets with the credentials SSL.com provides: `SSLDOTCOM_USERNAME`, `SSLDOTCOM_PASSWORD`, `SSLDOTCOM_TOTP_SECRET`, and `SSLDOTCOM_CREDENTIAL_ID`.
-- For local signing or dry runs, install the WiX toolset plus Microsoft's `signtool` (part of the Windows SDK), export your PFX certificate, and set the same environment variables before invoking `dist build --installer msi`. The signing service will be skipped automatically if the secrets are missing, so you can still iterate unsigned.
+- Releases are built with `cargo-dist`'s MSI pipeline and a follow-up PowerShell script (`scripts/sign-windows.ps1`) that runs `signtool.exe` over every `.exe` and `.msi` artifact. Add these GitHub Actions secrets so CI can import your certificate: `WINDOWS_CODESIGN_PFX` (base64-encoded PFX blob) and `WINDOWS_CODESIGN_PASSWORD` (the PFX password). The workflow skips signing automatically if either secret is absent, which makes unsigned PR builds trivial.
+- To test locally, install the Windows SDK (for `signtool`) and WiX, export your codesigning certificate to `authenticode.pfx`, and convert it into base64 with `certutil -encode authenticode.pfx authenticode.pfx.b64`. Feed those values to the script manually (`$env:WINDOWS_CODESIGN_PFX = Get-Content authenticode.pfx.b64 -Raw; $env:WINDOWS_CODESIGN_PASSWORD = '...'; pwsh scripts/sign-windows.ps1 -ArtifactsDir target/distrib -BinaryDir target/dist -PfxBase64 $env:WINDOWS_CODESIGN_PFX -PfxPassword $env:WINDOWS_CODESIGN_PASSWORD`) right after running `dist build --installer msi`.
 
 # Roadmap
 - [X] Change preset in realtime

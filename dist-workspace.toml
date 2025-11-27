@@ -6,7 +6,6 @@ cargo-dist-version = "0.30.2"
 ci = ["github"]
 installers = ["powershell", "shell", "msi"]
 targets = ["x86_64-pc-windows-msvc"]
-ssldotcom-windows-sign = "prod"
 
 [workspace.metadata.dist.autostart]
 default_enabled = true
