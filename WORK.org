@@ -17,6 +17,41 @@
 - `cargo-dist` consumes `[workspace.metadata.dist]` either inside `Cargo.toml` or `dist-workspace.toml`; we can extend that table with nested `[workspace.metadata.dist.autostart]` describing defaults without breaking dist tooling.
 - We'll read that TOML during build/runtime (via `include_str!`) to feed default autostart preference + prompt copy so release metadata is the single source of truth.
 
+** Cryptography Ecosystem (AWWY 2025-11-27)
+:PROPERTIES:
+:source: https://arewewebyet.org/topics/cryptography/
+:retrieved: 2025-11-27T14:20:00-06:00
+:END:
+- Rust already ships production-ready libs for most primitives: libsodium bindings, high-level libs such as `ring`, TLS stacks (`rustls`) and entire suites curated by RustCrypto; the ecosystem status board flags these as “usable now,” so we can lean on them for any secret management we add to the tray tooling.
+- Web stack coverage calls out the same crates we rely on indirectly (RustCrypto hashing/AEAD crates) which lowers risk when we bump dependencies to keep Windows signing metadata tamper-proof.
+
+** RustCrypto Snapshot (GitHub 2025-11-27)
+:PROPERTIES:
+:source: https://github.com/RustCrypto
+:retrieved: 2025-11-27T14:25:00-06:00
+:END:
+- Key repos remain extremely active: `RustCrypto/hashes` (2.1k★, 30 open issues) and `RustCrypto/block-ciphers` (742★) both updated today, so pinning to their latest releases is viable.
+- `RustCrypto/AEADs` (873★) and `RustCrypto/elliptic-curves` (813★) give us high-level primitives if we ever need signing for updater metadata.
+- Password/KDF coverage via `RustCrypto/password-hashes` (826★) means we can store any optional signing passwords using battle-tested libs instead of rolling our own.
+
+** cargo-pants Docs
+:PROPERTIES:
+:source: https://github.com/sonatype-nexus-community/cargo-pants
+:retrieved: 2025-11-27T14:28:00-06:00
+:END:
+- `cargo-pants` is a `cargo` subcommand that parses `Cargo.lock`, emits a BOM, and queries Sonatype OSS Index for vulnerabilities; exits with code 3 when findings exist.
+- Supports `.pants-ignore` for squelching known CVEs, verbose/loud flags for BOM dumps, and optional Nexus IQ integration via `cargo iq`.
+- Requires Rust 1.49+ and `OSS_INDEX_API_KEY`; we can integrate it into CI as a targeted supply-chain gate if we want hardened release pipelines before signing.
+
+** Windows Distribution Enhancements
+:PROPERTIES:
+:goal: Automate cert lifecycle + cargo-dist signing
+:status: in-progress
+:END:
+- Extend automation with `scripts/provision-dev-cert.ps1` so dev builds can auto-mint a self-signed Authenticode cert, export a PFX, and reuse our secret/sealed env path with zero manual steps.
+- Future improvements: add Store/Thumbprint metadata to `dist-workspace.toml` so `release-windows.ps1` can auto-select the right cert per channel; keep secrets isolated per CI environment by pointing `prepare-codesign-secrets.ps1` at repo-specific GH scopes.
+- Let's Encrypt cannot issue Authenticode certs, so we still need a commercial CA for production; we can nevertheless reuse Caddy-managed ACME flows to run a private CA for nightly testing and feed those certs into the same script pipeline.
+
 * Plan
 ** Milestones
 1. Document plan + default values from dist config (this section, `WORK.org`).
@@ -48,3 +83,7 @@
 - Added scripts/release-windows.ps1 so a single command exports the cert, uploads secrets, runs cargo-dist, signs artifacts, and optionally tags the repo; README now documents the exact invocation.
 ** 2025-11-27T13:35:00-06:00 Hacking Doc
 - Authored HACKING.org (env bootstrap, release wizard usage) and linked it from AGENTS.md.
+** 2025-11-27T14:35:00-06:00 Crypto Research + Dev Cert Automation
+- Reviewed AreWeWebYet cryptography status + RustCrypto repos to confirm we can lean on curated crates for any signing/secrets work.
+- Documented `cargo-pants` usage for BOM + vulnerability scanning so we can wire it into the Windows release CI before signing.
+- Added `scripts/provision-dev-cert.ps1`, taught `prepare-codesign-secrets.ps1` how to skip GH publishing, and documented the optional dev-cert flow in README + HACKING.

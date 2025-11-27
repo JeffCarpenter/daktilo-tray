@@ -33,6 +33,14 @@ cargo install daktilo-tray
 - **Manual variants**:
   - `scripts/bootstrap-codesign.ps1` (export + secret publication only) and `scripts/prepare-codesign-secrets.ps1` (already have a `.pfx` file) remain available if you need granular control.
   - `scripts/sign-windows.ps1` can be called directly with `-PfxBase64`/`-PfxPassword` to sign arbitrary artifacts immediately after `dist build --installer msi`.
+- **Dev/test certificates without a paid CA**: `scripts/provision-dev-cert.ps1` mints a short-lived self-signed code-signing certificate via `New-SelfSignedCertificate`, exports it to a temporary PFX, and reuses `prepare-codesign-secrets.ps1` so GitHub secrets + `.codesign.env` stay in sync. Example:
+  ```powershell
+  pwsh scripts/provision-dev-cert.ps1 `
+    -SubjectName "CN=Daktilo Tray Dev Signing" `
+    -PfxPassword "devonly" `
+    -Repo yourorg/daktilo-tray
+  ```
+  Windows will not trust self-signed signatures by default—use this flow for local smoke tests while you work with a publicly trusted CA for release builds. Pass `-SkipGitHubSecrets` if you only want the local `.codesign.env` updated.
 
 # Roadmap
 - [X] Change preset in realtime

@@ -65,6 +65,11 @@ pwsh scripts/release-windows.ps1 -SkipSecrets -Repo yourorg/daktilo-tray -PfxPas
 - `scripts/prepare-codesign-secrets.ps1`: use when you already have a `.pfx` file on disk
 - `scripts/sign-windows.ps1`: sign arbitrary artifacts given base64 + password
 
+** Dev/test certificate provisioning
+- `scripts/provision-dev-cert.ps1 -SubjectName "CN=Daktilo Tray Dev" -PfxPassword 'devonly' -Repo yourorg/daktilo-tray` mints a short-lived self-signed Authenticode cert via `New-SelfSignedCertificate`, exports it, and reuses `prepare-codesign-secrets.ps1` to push secrets + refresh `.codesign.env`.
+- Add `-SkipGitHubSecrets` to avoid touching GitHub and only refresh the local env snapshot (useful when you just need local smoke test signatures).
+- Reminder: Windows will not trust self-signed dev certs automatically—import them into Trusted Root locally if you need to suppress warnings, but never ship them to end users.
+
 * Dist + Packaging Notes
 - `dist-workspace.toml` is the authoritative source for installers and targets; keep `targets` trimmed to what you can sign.
 - After editing dist metadata, run `dist generate` to refresh `.github/workflows/release.yml` and `wix/main.wxs`.
