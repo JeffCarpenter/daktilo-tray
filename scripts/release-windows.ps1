@@ -11,7 +11,8 @@ param(
     [switch]$SkipSecrets,
     [string]$Tag,
     [string]$Channel,
-    [string]$ConfigPath = "dist-workspace.toml"
+    [string]$ConfigPath = "dist-workspace.toml",
+    [switch]$AllowDirty
 )
 
 . (Join-Path -Path $PSScriptRoot -ChildPath "common-dist.ps1")
@@ -129,8 +130,24 @@ $password = $envMap["WINDOWS_CODESIGN_PASSWORD"]
 $env:WINDOWS_CODESIGN_PFX = $base64
 $env:WINDOWS_CODESIGN_PASSWORD = $password
 
-Write-Host "Running cargo-dist ($($DistArgs -join ' '))"
-& dist build --allow-dirty @DistArgs
+if (-not $AllowDirty) {
+    $gitStatus = git status --porcelain
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to read git status (exit $LASTEXITCODE)."
+    }
+    if ($gitStatus) {
+        throw "Working tree has uncommitted changes. Commit/stash them or pass -AllowDirty to override."
+    }
+}
+
+$distBuildArgs = @("build")
+if ($AllowDirty) {
+    $distBuildArgs += "--allow-dirty"
+}
+$distBuildArgs += $DistArgs
+
+Write-Host "Running cargo-dist $($distBuildArgs -join ' ')"
+& dist @distBuildArgs
 
 $signScript = Join-Path -Path $PSScriptRoot -ChildPath "sign-windows.ps1"
 if (-not (Test-Path $signScript)) {

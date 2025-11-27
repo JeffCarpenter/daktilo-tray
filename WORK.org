@@ -122,6 +122,10 @@
 - Surveyed maintained Actions that already emit structured checks/summaries (notably `dorny/test-reporter@v2` and `ctrf-io/github-test-reporter@v1`) to understand how they pipe JUnit/CTRF artifacts into job summaries, PR comments, and status checks.
 - Captured the takeaway that we should (a) emit our own Markdown summary for coverage deltas directly in the coverage job, and (b) evaluate whether an off-the-shelf reporter can own the test summary UX or whether we need a thin wrapper around `$GITHUB_STEP_SUMMARY`.
 
+** 2025-11-27T23:59:00-06:00 Release parity cleanup
+- Reran `dist init --yes` to confirm the generated workflow matches our committed version, then restored the cargo-pants, signing, and installer-smoke hooks so CI stays hardened while tracking the upstream template.
+- Removed the hardcoded `--allow-dirty` from `scripts/release-windows.ps1`, added a cleanliness guard (with an opt-in `-AllowDirty` escape hatch), and updated HACKING.org with the new prerequisite.
+
 * Forward Plan
 :PROPERTIES:
 :owner: Codex
@@ -138,7 +142,7 @@
 - [X] *ACME workflow hardening*: wrap `acme-pfx.yml` in a protected GitHub environment with approvals and auto-promote the emitted `.env` snapshot into environment secrets for the release wizard.
 - [X] *Built-in reporting*: added the `scripts/run-coverage.ps1` helper that emits LCOV/HTML/JSON, rolls the coverage+test deltas into summary.md, and appends the Markdown directly to `$GITHUB_STEP_SUMMARY` when available.
 - [X] *JUnit plumbing*: wired `dorny/test-reporter@v2` into `.github/workflows/coverage.yml` so the generated `target/test-results/junit.xml` feeds structured test annotations on every PR, with fork-friendly `fail-on-empty` semantics captured in docs.
-- [ ] *Release workflow parity*: reconcile `.github/workflows/release.yml` with cargo-dist's generated template so `dist build --installer msi` no longer needs `--allow-dirty` while preserving our cargo-pants + signtool + smoke jobs.
+- [X] *Release workflow parity*: reran `dist init --yes` to refresh `.github/workflows/release.yml`, restored the cargo-pants/sign/smoke hooks atop the latest template, and taught `scripts/release-windows.ps1` to enforce a clean tree (opt-in `-AllowDirty` remains for local overrides).
 ** Coverage Roadmap
 :PROPERTIES:
 :status: in_review
