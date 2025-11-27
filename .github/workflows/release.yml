@@ -139,6 +139,18 @@ jobs:
       - name: Install dependencies
         run: |
           ${{ matrix.packages_install }}
+      - name: Install cargo-pants
+        if: contains(matrix.targets, 'pc-windows')
+        shell: pwsh
+        run: |
+          cargo install cargo-pants --locked
+      - name: Supply-chain gate (cargo-pants)
+        if: contains(matrix.targets, 'pc-windows')
+        shell: pwsh
+        env:
+          OSS_INDEX_API_KEY: ${{ secrets.OSS_INDEX_API_KEY }}
+        run: |
+          ./scripts/run-cargo-pants.ps1
       - name: Build artifacts
         run: |
           # Actually do builds and make zips and whatnot

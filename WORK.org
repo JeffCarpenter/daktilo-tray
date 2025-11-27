@@ -52,6 +52,15 @@
 - Future improvements: add Store/Thumbprint metadata to `dist-workspace.toml` so `release-windows.ps1` can auto-select the right cert per channel; keep secrets isolated per CI environment by pointing `prepare-codesign-secrets.ps1` at repo-specific GH scopes.
 - Let's Encrypt cannot issue Authenticode certs, so we still need a commercial CA for production; we can nevertheless reuse Caddy-managed ACME flows to run a private CA for nightly testing and feed those certs into the same script pipeline.
 
+** ACME via Caddy
+:PROPERTIES:
+:source: https://caddyserver.com/docs/command-line
+:retrieved: 2025-11-27T15:05:00-06:00
+:END:
+- `caddy run --config <file> --adapter caddyfile` honors the global `email`, `acme_ca`, and `storage` options, so we can drive Let's Encrypt issuance by writing a tiny temporary Caddyfile per domain.
+- Site blocks with `respond` + `tls { dns cloudflare { token {env.CLOUDFLARE_API_TOKEN} } }` hook into the Cloudflare DNS challenge as long as the binary is built with the Cloudflare provider.
+- Certificates land under `<storage>/certificates/<acme-host>-directory/<domain>/<domain>.crt|.key`, so converting them into a Windows-friendly PFX is just a matter of feeding those PEMs into .NET's `X509Certificate2.CreateFromPemFile`.
+
 * Plan
 ** Milestones
 1. Document plan + default values from dist config (this section, `WORK.org`).
@@ -87,3 +96,9 @@
 - Reviewed AreWeWebYet cryptography status + RustCrypto repos to confirm we can lean on curated crates for any signing/secrets work.
 - Documented `cargo-pants` usage for BOM + vulnerability scanning so we can wire it into the Windows release CI before signing.
 - Added `scripts/provision-dev-cert.ps1`, taught `prepare-codesign-secrets.ps1` how to skip GH publishing, and documented the optional dev-cert flow in README + HACKING.
+** 2025-11-27T15:45:00-06:00 Supply-chain + CA automation
+- Created `scripts/common-dist.ps1` so PowerShell automation can read `dist-workspace.toml` once and share channel defaults.
+- Added per-channel codesign metadata + supply-chain thresholds to `dist-workspace.toml`; `scripts/release-windows.ps1` now accepts `-Channel` and auto-populates store/selector/env-file.
+- Authored `scripts/run-cargo-pants.ps1` and wired it into `.github/workflows/release.yml` (Windows runners install `cargo-pants`, run the helper, and only fail the job when the configured CVSS threshold is crossed).
+- Wrote `scripts/request-acme-pfx.ps1` to spin up Caddy, satisfy HTTP/DNS challenges, and convert the resulting PEMs into a PFX for downstream signing flows.
+- Updated `HACKING.org`, `README.md`, and `.gitignore` with the new workflows plus documented everything here per AGENTS.md.

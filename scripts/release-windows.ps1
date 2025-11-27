@@ -1,15 +1,19 @@
 param(
     [string]$SubjectName,
     [string]$Thumbprint,
-    [string]$Store = "My",
-    [ValidateSet("CurrentUser", "LocalMachine")][string]$StoreLocation = "LocalMachine",
+    [string]$Store,
+    [ValidateSet("CurrentUser", "LocalMachine")][string]$StoreLocation,
     [Parameter(Mandatory = $true)][string]$PfxPassword,
     [Parameter(Mandatory = $true)][string]$Repo,
     [string]$EnvFile = ".\.codesign.env",
     [string[]]$DistArgs = @("--installer", "msi"),
     [switch]$SkipSecrets,
-    [string]$Tag
+    [string]$Tag,
+    [string]$Channel,
+    [string]$ConfigPath = "dist-workspace.toml"
 )
+
+. (Join-Path -Path $PSScriptRoot -ChildPath "common-dist.ps1")
 
 $ErrorActionPreference = "Stop"
 
@@ -24,6 +28,46 @@ Require-Command -Name "gh" -InstallHint "Install GitHub CLI from https://cli.git
 Require-Command -Name "dist" -InstallHint "Install cargo-dist via 'cargo install cargo-dist' or see https://github.com/axodotdev/cargo-dist." 
 Require-Command -Name "signtool.exe" -InstallHint "Install the Windows SDK so signtool.exe is available."
 Require-Command -Name "git" -InstallHint "Install Git for Windows."
+
+$metadata = $null
+try {
+    $metadata = Get-DistMetadata -Path $ConfigPath
+} catch {
+    Write-Warning $_.Exception.Message
+}
+$channelProfile = $null
+if ($metadata) {
+    $channelProfile = Get-CodesignProfile -Metadata $metadata -Channel $Channel
+    if ($channelProfile) {
+        $resolvedChannel = $channelProfile.Name
+        $settings = $channelProfile.Settings
+        if (-not $PSBoundParameters.ContainsKey("Store") -and $settings.store) {
+            $Store = $settings.store
+        }
+        if (-not $PSBoundParameters.ContainsKey("StoreLocation") -and $settings.store_location) {
+            $StoreLocation = $settings.store_location
+        }
+        if (-not $PSBoundParameters.ContainsKey("SubjectName") -and $settings.subject) {
+            $SubjectName = $settings.subject
+        }
+        if (-not $PSBoundParameters.ContainsKey("Thumbprint") -and $settings.thumbprint) {
+            $Thumbprint = $settings.thumbprint
+        }
+        if (-not $PSBoundParameters.ContainsKey("EnvFile") -and $settings.env_file) {
+            $EnvFile = $settings.env_file
+        }
+        if ($resolvedChannel) {
+            Write-Host "Codesign channel resolved to '$resolvedChannel' via dist metadata."
+        }
+    } else {
+        if ($Channel) {
+            Write-Warning "No codesign settings found for channel '$Channel'. Falling back to CLI arguments."
+        }
+    }
+}
+
+if (-not $Store) { $Store = "My" }
+if (-not $StoreLocation) { $StoreLocation = "LocalMachine" }
 
 $bootstrapScript = Join-Path -Path $PSScriptRoot -ChildPath "bootstrap-codesign.ps1"
 if (-not (Test-Path $bootstrapScript)) {

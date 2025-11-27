@@ -65,10 +65,25 @@ pwsh scripts/release-windows.ps1 -SkipSecrets -Repo yourorg/daktilo-tray -PfxPas
 - `scripts/prepare-codesign-secrets.ps1`: use when you already have a `.pfx` file on disk
 - `scripts/sign-windows.ps1`: sign arbitrary artifacts given base64 + password
 
+** Channel-aware certificates via dist metadata
+- `dist-workspace.toml` now owns `[workspace.metadata.dist.codesign]`; add one entry per channel (ex: `dev`, `stable`) with `store`, `store_location`, `subject`/`thumbprint`, and optional `env_file`.
+- `scripts/release-windows.ps1 -Channel stable -PfxPassword 'prodsecret' -Repo yourorg/daktilo-tray` will auto-populate the store + selector using that metadata, export the cert, push secrets, and sign. Override any field with explicit CLI flags when needed.
+- Keep the `stable` thumbprint updated to match the publicly trusted cert installed in `LocalMachine\My`. For dev smoke tests pick `Channel dev` so the script defaults to the self-signed cert minted by `scripts/provision-dev-cert.ps1`.
+
 ** Dev/test certificate provisioning
 - `scripts/provision-dev-cert.ps1 -SubjectName "CN=Daktilo Tray Dev" -PfxPassword 'devonly' -Repo yourorg/daktilo-tray` mints a short-lived self-signed Authenticode cert via `New-SelfSignedCertificate`, exports it, and reuses `prepare-codesign-secrets.ps1` to push secrets + refresh `.codesign.env`.
 - Add `-SkipGitHubSecrets` to avoid touching GitHub and only refresh the local env snapshot (useful when you just need local smoke test signatures).
-- Reminder: Windows will not trust self-signed dev certs automatically—import them into Trusted Root locally if you need to suppress warnings, but never ship them to end users.
+- Reminder: Windows will not trust self-signed dev certs automatically-import them into Trusted Root locally if you need to suppress warnings, but never ship them to end users.
+
+** ACME bootstrap with Caddy + Let's Encrypt
+- Use `scripts/request-acme-pfx.ps1 -Domains @("sign.yourdomain.com") -Email you@yourdomain.com -OutputPfx .\public-ca.pfx -PfxPassword 'change-me'` to spin up `caddy run` with an in-memory Caddyfile, satisfy HTTP-01 on this host, wait for the issued certificate under `target/acme-cache/`, and convert it to a PFX automatically.
+- Pass `-DnsProvider cloudflare -CloudflareApiToken $env:CLOUDFLARE_API_TOKEN` if you compiled Caddy with the `dns.providers.cloudflare` module and prefer DNS-01 validation through Cloudflare.
+- The script only orchestrates issuance + conversion; you still need a CA that can give you a true Authenticode cert (Let's Encrypt only covers TLS). Use the exported PFX to seed staging environments or to prove domain control while you work with a commercial CA.
+
+** Supply-chain gate (cargo-pants)
+- CI calls `scripts/run-cargo-pants.ps1`, which parses the BOM emitted by `cargo pants` and fails Windows releases only when a vulnerability meets or exceeds the CVSS threshold declared in `[workspace.metadata.dist.supply_chain]`.
+- Threshold defaults to 7.0 (High). Override per run with `pwsh scripts/run-cargo-pants.ps1 -SeverityThreshold 9.0` if you need to allow High vulns temporarily.
+- Use `.pants-ignore` to squash already triaged CVEs; the helper respects `--dev` when `include_dev_dependencies = true` in the dist metadata.
 
 * Dist + Packaging Notes
 - `dist-workspace.toml` is the authoritative source for installers and targets; keep `targets` trimmed to what you can sign.

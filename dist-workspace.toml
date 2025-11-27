@@ -12,6 +12,29 @@ default_enabled = true
 menu_label = "Launch Daktilo Tray at login"
 tooltip = "Default run-on-login preference consumed by the tray UI and installers."
 
+[workspace.metadata.dist.codesign]
+# Codesign channels let scripts choose the right cert defaults with -Channel.
+default_channel = "dev"
+
+[workspace.metadata.dist.codesign.channels.dev]
+description = "Self-signed developer cert minted locally via provision-dev-cert.ps1"
+store = "My"
+store_location = "CurrentUser"
+subject = "CN=Daktilo Tray Dev Signing"
+env_file = ".codesign.dev.env"
+
+[workspace.metadata.dist.codesign.channels.stable]
+description = "Publicly trusted cert stored in the LocalMachine store (imported from your CA)"
+store = "My"
+store_location = "LocalMachine"
+thumbprint = "REPLACE_WITH_PROD_CERT_THUMBPRINT"
+env_file = ".codesign.env"
+
+[workspace.metadata.dist.supply_chain]
+pants_threshold = 7.0
+include_dev_dependencies = false
+ignore_file = ".pants-ignore"
+
 # Config for 'dist'
 [dist]
 # The preferred dist version to use in CI (Cargo.toml SemVer syntax)
