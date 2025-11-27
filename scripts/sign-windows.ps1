@@ -3,24 +3,31 @@ param(
     [Parameter(Mandatory = $true)][string]$BinaryDir,
     [Parameter(Mandatory = $true)][string]$PfxBase64,
     [Parameter(Mandatory = $true)][string]$PfxPassword,
-    [string]$TimestampUrl = "http://timestamp.digicert.com"
+    [string]$TimestampUrl = "http://timestamp.digicert.com",
+    [string]$SignToolPath
 )
 
-if (-not (Get-Command signtool.exe -ErrorAction SilentlyContinue)) {
-    throw "signtool.exe not found on PATH. Install the Windows SDK or Visual Studio build tools to provide it."
+. (Join-Path -Path $PSScriptRoot -ChildPath "common-dist.ps1")
+
+if ($SignToolPath) {
+    $ResolvedSignTool = Get-SignToolPath -Override $SignToolPath
+} else {
+    $ResolvedSignTool = Get-SignToolPath
 }
+Write-Host "Using signtool at $ResolvedSignTool"
 
 $tempPfx = Join-Path -Path ([System.IO.Path]::GetTempPath()) -ChildPath ("codesign-" + [guid]::NewGuid().ToString() + ".pfx")
 [System.IO.File]::WriteAllBytes($tempPfx, [Convert]::FromBase64String($PfxBase64))
 
-function Sign-File([string]$PathToFile) {
+function Sign-File {
     param(
+        [string]$PathToFile,
         [string]$CertificatePath,
         [string]$Password,
         [string]$Timestamp
     )
     Write-Host "Signing $PathToFile"
-    & signtool.exe sign `
+    & $ResolvedSignTool sign `
         /fd SHA256 `
         /td SHA256 `
         /tr $Timestamp `
@@ -32,8 +39,9 @@ function Sign-File([string]$PathToFile) {
     }
 }
 
-function Sign-ExecutablesInTree([string]$Root) {
+function Sign-ExecutablesInTree {
     param(
+        [string]$Root,
         [string]$CertificatePath,
         [string]$Password,
         [string]$Timestamp
@@ -41,7 +49,9 @@ function Sign-ExecutablesInTree([string]$Root) {
     if (-not (Test-Path $Root)) {
         return
     }
-    Get-ChildItem -Path $Root -Filter *.exe -File -Recurse | ForEach-Object {
+    Get-ChildItem -Path $Root -Filter *.exe -File -Recurse | Where-Object {
+        $_.FullName -notmatch "[\\/]build[\\/]"
+    } | ForEach-Object {
         Sign-File -PathToFile $_.FullName -CertificatePath $CertificatePath -Password $Password -Timestamp $Timestamp
     }
 }

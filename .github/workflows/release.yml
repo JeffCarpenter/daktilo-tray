@@ -149,8 +149,12 @@ jobs:
         shell: pwsh
         env:
           OSS_INDEX_API_KEY: ${{ secrets.OSS_INDEX_API_KEY }}
+          DIST_CHANNEL: ${{ github.event_name == 'pull_request' && 'dev' || 'stable' }}
         run: |
-          ./scripts/run-cargo-pants.ps1
+          if (-not $env:DIST_CHANNEL) {
+            $env:DIST_CHANNEL = "stable"
+          }
+          ./scripts/run-cargo-pants.ps1 -Channel $env:DIST_CHANNEL
       - name: Build artifacts
         run: |
           # Actually do builds and make zips and whatnot

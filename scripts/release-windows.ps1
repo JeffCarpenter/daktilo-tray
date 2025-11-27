@@ -26,7 +26,12 @@ function Require-Command {
 
 Require-Command -Name "gh" -InstallHint "Install GitHub CLI from https://cli.github.com/."
 Require-Command -Name "dist" -InstallHint "Install cargo-dist via 'cargo install cargo-dist' or see https://github.com/axodotdev/cargo-dist." 
-Require-Command -Name "signtool.exe" -InstallHint "Install the Windows SDK so signtool.exe is available."
+try {
+    $resolvedSignTool = Get-SignToolPath
+    Write-Host "Using signtool at $resolvedSignTool"
+} catch {
+    throw $_
+}
 Require-Command -Name "git" -InstallHint "Install Git for Windows."
 
 $metadata = $null

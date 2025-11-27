@@ -33,6 +33,7 @@ cargo install daktilo-tray
 - **Manual variants**:
   - `scripts/bootstrap-codesign.ps1` (export + secret publication only) and `scripts/prepare-codesign-secrets.ps1` (already have a `.pfx` file) remain available if you need granular control.
   - `scripts/sign-windows.ps1` can be called directly with `-PfxBase64`/`-PfxPassword` to sign arbitrary artifacts immediately after `dist build --installer msi`.
+- **Channel-aware defaults**: `[workspace.metadata.dist.codesign.channels.*]` in `dist-workspace.toml` describe certificate stores, selectors, and env snapshots for each track (`dev`, `stable`, ...). Pass `-Channel` to `scripts/release-windows.ps1` so it auto-selects the right cert and resolves `signtool.exe` from the Windows SDK even when it is not on `PATH`.
 - **Dev/test certificates without a paid CA**: `scripts/provision-dev-cert.ps1` mints a short-lived self-signed code-signing certificate via `New-SelfSignedCertificate`, exports it to a temporary PFX, and reuses `prepare-codesign-secrets.ps1` so GitHub secrets + `.codesign.env` stay in sync. Example:
   ```powershell
   pwsh scripts/provision-dev-cert.ps1 `
@@ -44,8 +45,13 @@ cargo install daktilo-tray
 
 # Supply-chain Guardrails
 - CI installs `cargo-pants` and runs `scripts/run-cargo-pants.ps1`, which captures the CLI output, inspects every `CVSS Score`, and only fails the Windows release job when the maximum score meets the threshold published in `dist-workspace.toml` (`[workspace.metadata.dist.supply_chain]`).
+- Declare `[workspace.metadata.dist.supply_chain.channels.<name>]` to specialize thresholds and `--dev` inclusion per channel. The workflow passes `dev` for pull requests (laxer threshold, include dev dependencies) and `stable` for signed tags so your hotfix builds stay strict without disrupting day-to-day iteration.
 - To exercise the same gate locally: `pwsh scripts/run-cargo-pants.ps1 -SeverityThreshold 7.5`. Add `-IncludeDevDependencies` to mirror the `--dev` behavior when you need to scan the full dependency graph.
 - Maintain `.pants-ignore` with the OSS Index vulnerability IDs you have accepted so the helper (and CI) stays green while you work on patches.
+
+# Coverage
+- Run `pwsh scripts/run-coverage.ps1 -HtmlReport` to produce `target/coverage/lcov.info` plus an HTML dashboard (under `target/coverage/html`) via `cargo llvm-cov`. The helper ensures `cargo-llvm-cov` is installed, cleans stale instrumentation, and fails fast if the LCOV output is missing.
+- `.github/workflows/coverage.yml` executes the same helper on `windows-latest` for every PR and `main` push. Review the uploaded artifact (`coverage-<run-id>`) to inspect LCOV/HTML outputs or forward the LCOV file to Codecov/coveralls if you add tokens later.
 
 # ACME Bootstrap / Let's Encrypt + Caddy
 - `scripts/request-acme-pfx.ps1` automates spinning up `caddy run`, acquiring a Let's Encrypt (or staging) TLS certificate for `sign.yourdomain.com`, and writing a password-protected PFX you can stash as part of your release secrets. This is ideal for staging and for proving domain control to a commercial Authenticode CA.
@@ -57,7 +63,8 @@ cargo install daktilo-tray
     -OutputPfx .\certs\lets-encrypt-staging.pfx `
     -PfxPassword 'change-me'
   ```
-- If you built Caddy with the Cloudflare DNS module, append `-DnsProvider cloudflare -CloudflareApiToken $env:CLOUDFLARE_API_TOKEN` to satisfy DNS-01 via Cloudflare instead of HTTP-01. Remember Let's Encrypt certificates cover TLS—not code signing—so feed the resulting PFX into your higher-trust workflow or keep using `scripts/provision-dev-cert.ps1` for local smoke tests.
+- If you built Caddy with the Cloudflare DNS module, append `-DnsProvider cloudflare -CloudflareApiToken $env:CLOUDFLARE_API_TOKEN` to satisfy DNS-01 via Cloudflare instead of HTTP-01. Remember Let's Encrypt certificates cover TLS-not code signing-so feed the resulting PFX into your higher-trust workflow or keep using `scripts/provision-dev-cert.ps1` for local smoke tests.
+- Want an automated, auditable run? Trigger the **Request ACME PFX** workflow in GitHub (manual dispatch). It installs Caddy on a Windows runner, calls `scripts/request-acme-pfx.ps1` with your domains/email, optionally feeds Cloudflare DNS tokens, and uploads both the PFX and pre-formatted `.env` snapshot as a one-click artifact for operators.
 
 # Roadmap
 - [X] Change preset in realtime

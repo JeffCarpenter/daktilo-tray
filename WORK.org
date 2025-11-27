@@ -102,3 +102,38 @@
 - Authored `scripts/run-cargo-pants.ps1` and wired it into `.github/workflows/release.yml` (Windows runners install `cargo-pants`, run the helper, and only fail the job when the configured CVSS threshold is crossed).
 - Wrote `scripts/request-acme-pfx.ps1` to spin up Caddy, satisfy HTTP/DNS challenges, and convert the resulting PEMs into a PFX for downstream signing flows.
 - Updated `HACKING.org`, `README.md`, and `.gitignore` with the new workflows plus documented everything here per AGENTS.md.
+** 2025-11-27T17:45:00-06:00 Channel rehearsal + release wizard polish
+- Expanded `[workspace.metadata.dist.supply_chain]` with channel-specific overrides (`dev` includes dev-deps @ 8.5 CVSS, `stable` sticks to 7.0) and taught `scripts/run-cargo-pants.ps1` to accept `-Channel` so CI no longer needs manual threshold tweaks.
+- Hardened signtool detection with `Get-SignToolPath` (checks `SIGNTOOL_PATH`, PATH, and Windows SDK installs) and plumbed it through `scripts/release-windows.ps1`/`scripts/sign-windows.ps1`; filtered signing to skip `target\dist\build\*.exe` so signing no longer takes 10+ minutes.
+- Rehearsed `scripts/release-windows.ps1 -Channel dev` and `-Channel stable` end-to-end with the locally minted dev cert + `.codesign.*.env` snapshots (`dist build --installer msi` succeeded twice, artifacts signed with the self-signed cert, warnings limited to upstream `daktilo_lib` docs/cfg hints).
+
+** 2025-11-27T18:20:00-06:00 ACME workflow + docs
+- Authored `.github/workflows/acme-pfx.yml` so operators can manual-dispatch a Windows runner that installs Caddy, calls `scripts/request-acme-pfx.ps1`, handles Cloudflare DNS tokens automatically, and uploads both the `.pfx` and ready-to-import `.env` snapshot as artifacts.
+- Documented the new workflow alongside the existing PowerShell helper in `README.md` and `HACKING.org`; reiterated that Let's Encrypt certs are TLS-only and serve as domain-control proof for commercial Authenticode issuers.
+
+** 2025-11-27T18:45:00-06:00 Coverage automation
+- Introduced `scripts/run-coverage.ps1` (wraps `cargo llvm-cov`, emits LCOV + optional HTML, fails fast if prerequisites or outputs are missing) and wired it into `.github/workflows/coverage.yml` on `windows-latest` (installs llvm-tools + cargo-llvm-cov, uploads `target/coverage` artifacts).
+- Added contributor guidance + README notes describing how to run the helper locally and interpret the uploaded LCOV bundle; the coverage workflow now runs on every PR + `main` push so regressions are visible before signing artifacts.
+
+* Forward Plan
+:PROPERTIES:
+:owner: Codex
+:last_reviewed: 2025-11-27T18:45:00-06:00
+:intent: Hardening + coverage
+:END:
+** Automation Worklist
+:PROPERTIES:
+:status: queued
+:confidence: high
+:END:
+- ?? *Secret routing*: teach `scripts/release-windows.ps1` to read its `-Repo`/`-EnvFile` target from `[workspace.metadata.dist.codesign.channels.*]` so channel metadata drives the entire `gh secret set` story.
+- ?? *Installer smoke tests*: add a Windows CI job that installs the freshly signed MSI, confirms the autostart registry entries honor channel defaults, and captures `signtool verify` output for each artifact.
+- ?? *ACME workflow hardening*: wrap `acme-pfx.yml` in a protected GitHub environment with approvals and auto-promote the emitted `.env` snapshot into environment secrets for the release wizard.
+** Coverage Roadmap
+:PROPERTIES:
+:status: planning
+:tools: cargo-llvm-cov, grcov
+:END:
+- ?? *Codecov uplink*: feed `target/coverage/lcov.info` into Codecov (or equivalent) once tokens land so reviewers see deltas inline.
+- ?? *Budget enforcement*: snapshot the current coverage % and fail the coverage job if new commits dip below the agreed floor (allow per-channel overrides if needed).
+- ?? *HTML publishing*: surface the generated coverage HTML via Pages or PR comments so contributors can inspect hit/miss heatmaps without downloading artifacts.

@@ -38,6 +38,44 @@ print(json.dumps(data))
     return $json | ConvertFrom-Json
 }
 
+function Get-SignToolPath {
+    [CmdletBinding()]
+    param(
+        [string]$Override
+    )
+
+    if ($Override) {
+        if (-not (Test-Path $Override)) {
+            throw "Provided SignTool path '$Override' does not exist."
+        }
+        return (Resolve-Path $Override).Path
+    }
+
+    $command = Get-Command signtool.exe -ErrorAction SilentlyContinue
+    if ($command) {
+        return $command.Source
+    }
+
+    $envPath = $env:SIGNTOOL_PATH
+    if ($envPath -and (Test-Path $envPath)) {
+        return (Resolve-Path $envPath).Path
+    }
+
+    $wellKnown = @(
+        "C:\Program Files (x86)\Windows Kits\10\App Certification Kit\signtool.exe",
+        "C:\Program Files (x86)\Windows Kits\10\bin\x64\signtool.exe",
+        "C:\Program Files (x86)\Windows Kits\10\bin\x86\signtool.exe"
+    )
+
+    foreach ($candidate in $wellKnown) {
+        if (Test-Path $candidate) {
+            return $candidate
+        }
+    }
+
+    throw "signtool.exe not found on PATH, SIGNTOOL_PATH, or any well-known Windows SDK folders."
+}
+
 function Get-CodesignProfile {
     [CmdletBinding()]
     param(
@@ -73,10 +111,31 @@ function Get-CodesignProfile {
 function Get-SupplyChainPolicy {
     [CmdletBinding()]
     param(
-        [psobject]$Metadata
+        [psobject]$Metadata,
+        [string]$Channel
     )
 
     if (-not $Metadata) { return $null }
-    return $Metadata.workspace.metadata.dist.supply_chain
-}
+    $supply = $Metadata.workspace.metadata.dist.supply_chain
+    if (-not $supply) { return $null }
 
+    $result = @{}
+    foreach ($prop in $supply.PSObject.Properties) {
+        if ($prop.Name -ne "channels") {
+            $result[$prop.Name] = $prop.Value
+        }
+    }
+
+    if ($Channel -and $supply.channels) {
+        foreach ($prop in $supply.channels.PSObject.Properties) {
+            if ($prop.Name -ieq $Channel) {
+                foreach ($chanProp in $prop.Value.PSObject.Properties) {
+                    $result[$chanProp.Name] = $chanProp.Value
+                }
+                break
+            }
+        }
+    }
+
+    return [pscustomobject]$result
+}

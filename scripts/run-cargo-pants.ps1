@@ -3,7 +3,8 @@ param(
     [switch]$IncludeDevDependencies,
     [string]$CargoToml = "Cargo.toml",
     [string]$IgnoreFile,
-    [string]$ConfigPath = "dist-workspace.toml"
+    [string]$ConfigPath = "dist-workspace.toml",
+    [string]$Channel
 )
 
 . (Join-Path -Path $PSScriptRoot -ChildPath "common-dist.ps1")
@@ -27,7 +28,7 @@ try {
 
 $policy = $null
 if ($metadata) {
-    $policy = Get-SupplyChainPolicy -Metadata $metadata
+    $policy = Get-SupplyChainPolicy -Metadata $metadata -Channel $Channel
 }
 
 if (-not $PSBoundParameters.ContainsKey("SeverityThreshold")) {
@@ -46,7 +47,7 @@ if (-not $PSBoundParameters.ContainsKey("IgnoreFile")) {
     }
 }
 
-if (-not $PSBoundParameters.ContainsKey("IncludeDevDependencies") -and $policy -and $policy.include_dev_dependencies) {
+if (-not $PSBoundParameters.ContainsKey("IncludeDevDependencies") -and $policy -and $policy.PSObject.Properties.Name -contains "include_dev_dependencies") {
     $IncludeDevDependencies = [bool]$policy.include_dev_dependencies
 }
 
@@ -55,6 +56,9 @@ if ($IncludeDevDependencies) {
     $cargoArgs += "--dev"
 }
 
+if ($Channel) {
+    Write-Host "cargo-pants channel: $Channel"
+}
 Write-Host "Running cargo $($cargoArgs -join ' ') (threshold: $SeverityThreshold)"
 
 $pantsOutput = & cargo @cargoArgs 2>&1 | Tee-Object -Variable lines

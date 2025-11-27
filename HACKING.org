@@ -68,6 +68,7 @@ pwsh scripts/release-windows.ps1 -SkipSecrets -Repo yourorg/daktilo-tray -PfxPas
 ** Channel-aware certificates via dist metadata
 - `dist-workspace.toml` now owns `[workspace.metadata.dist.codesign]`; add one entry per channel (ex: `dev`, `stable`) with `store`, `store_location`, `subject`/`thumbprint`, and optional `env_file`.
 - `scripts/release-windows.ps1 -Channel stable -PfxPassword 'prodsecret' -Repo yourorg/daktilo-tray` will auto-populate the store + selector using that metadata, export the cert, push secrets, and sign. Override any field with explicit CLI flags when needed.
+- The helper now probes `SIGNTOOL_PATH`, `PATH`, and the common Windows SDK locations so `signtool.exe` is always found without you having to mutate the environment first.
 - Keep the `stable` thumbprint updated to match the publicly trusted cert installed in `LocalMachine\My`. For dev smoke tests pick `Channel dev` so the script defaults to the self-signed cert minted by `scripts/provision-dev-cert.ps1`.
 
 ** Dev/test certificate provisioning
@@ -79,11 +80,17 @@ pwsh scripts/release-windows.ps1 -SkipSecrets -Repo yourorg/daktilo-tray -PfxPas
 - Use `scripts/request-acme-pfx.ps1 -Domains @("sign.yourdomain.com") -Email you@yourdomain.com -OutputPfx .\public-ca.pfx -PfxPassword 'change-me'` to spin up `caddy run` with an in-memory Caddyfile, satisfy HTTP-01 on this host, wait for the issued certificate under `target/acme-cache/`, and convert it to a PFX automatically.
 - Pass `-DnsProvider cloudflare -CloudflareApiToken $env:CLOUDFLARE_API_TOKEN` if you compiled Caddy with the `dns.providers.cloudflare` module and prefer DNS-01 validation through Cloudflare.
 - The script only orchestrates issuance + conversion; you still need a CA that can give you a true Authenticode cert (Let's Encrypt only covers TLS). Use the exported PFX to seed staging environments or to prove domain control while you work with a commercial CA.
+- Prefer automation? Trigger the manual **Request ACME PFX** workflow in GitHub; it installs Caddy on a Windows runner, invokes the same script with your inputs, injects Cloudflare tokens from secrets, and uploads both the `.pfx` and `.env` snapshot as artifacts for operators.
 
 ** Supply-chain gate (cargo-pants)
 - CI calls `scripts/run-cargo-pants.ps1`, which parses the BOM emitted by `cargo pants` and fails Windows releases only when a vulnerability meets or exceeds the CVSS threshold declared in `[workspace.metadata.dist.supply_chain]`.
+- Add `[workspace.metadata.dist.supply_chain.channels.dev]`, `[...stable]`, etc. when you want per-track policies. The helper accepts `-Channel`, merges the base table with the requested channel, and the release workflow already passes `dev` for PRs and `stable` for signed tags so you never have to edit TOML between runs.
 - Threshold defaults to 7.0 (High). Override per run with `pwsh scripts/run-cargo-pants.ps1 -SeverityThreshold 9.0` if you need to allow High vulns temporarily.
 - Use `.pants-ignore` to squash already triaged CVEs; the helper respects `--dev` when `include_dev_dependencies = true` in the dist metadata.
+
+** Coverage drill
+- Install `cargo-llvm-cov` (`cargo install cargo-llvm-cov --locked`), then run `pwsh scripts/run-coverage.ps1 -HtmlReport` to reset instrumentation, execute the workspace, and emit both `target/coverage/lcov.info` and an HTML dashboard under `target/coverage/html`.
+- `.github/workflows/coverage.yml` executes the same helper on every PR + `main` push and uploads the coverage folder as an artifact so reviewers can diff deltas or feed the LCOV file into Codecov/coveralls later.
 
 * Dist + Packaging Notes
 - `dist-workspace.toml` is the authoritative source for installers and targets; keep `targets` trimmed to what you can sign.
