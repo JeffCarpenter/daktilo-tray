@@ -151,7 +151,7 @@
 - [X] *Codecov uplink*: `codecov/codecov-action@v4` now ingests `target/coverage/lcov.info` from the coverage job (token optional for public repos, secret `CODECOV_TOKEN` documented for private forks).
 - [X] *Budget enforcement*: `scripts/run-coverage.ps1 -EnforceBaseline` compares each metric against `[workspace.metadata.dist.coverage.baseline]`, honors an optional `tolerance`, and fails CI if coverage dips below the stored floor.
 - [X] *HTML publishing*: coverage HTML is uploaded as a Pages artifact on `main` pushes, and `publish-coverage` deploys it to the `coverage-site` environment so contributors can browse hit/miss diffs without downloading artifacts.
-- [ ] *Coverage deltas in PR comments*: follow-up to mirror the Pages URL + key deltas into PR comments for better discoverability.
+- [X] *Coverage deltas in PR comments*: GitHub PRs now get an auto-updated summary sourced from target/coverage/comment.md plus a link to the published HTML site.
 *** 2025-11-27T20:05:00-06:00 Research refresh
 - Re-read AreWeWebYet's cryptography status board; it still lists battle-tested TLS/lib crates (ring, rustls, libsodium bindings) as "+" so leaning on them for signing helpers remains low risk.
 - GitHub API still shows RustCrypto core repos (hashes, AEADs, block-ciphers, elliptic-curves, password-hashes) active within 24h; star/issue counts confirm we are leaning on well-maintained crates.
@@ -181,5 +181,11 @@
 - Taught `.github/workflows/coverage.yml` to call the helper with enforcement enabled, upload LCOV to Codecov, feed HTML into GitHub Pages, and gate deployments behind a new `publish-coverage` job bound to a `coverage-site` environment.
 - Documented the new knobs (baseline, tolerance, Codecov secret, Pages URL) in HACKING.org and checked `target/coverage/summary.md`/GitHub Step Summary output locally to ensure the failure path is exercised when baselines shrink.
 - Follow-up captured above: wire PR comment bots once Codecov tokens land and scope the work needed to reconcile our release workflow with upstream cargo-dist templates so `dist build` can drop `--allow-dirty`.
+
+** 2025-11-27T23:59:30-06:00 Coverage PR comments
+- Added `[workspace.metadata.dist.coverage.pages_url]` so automation knows where the published HTML lives (defaults to https://ndtoan96.github.io/daktilo-tray/).
+- Extended `scripts/run-coverage.ps1` with `-CommentPath`, a reusable Markdown renderer, and a `pages_url` aware summary payload that produces `target/coverage/comment.md`.
+- Updated `.github/workflows/coverage.yml` to pass the new flag and run `peter-evans/create-or-update-comment@v4`, so every pull request automatically gets a refreshed coverage/test comment linked back to the Pages site.
+- Documented the new behavior in HACKING.org and closed the last open Coverage Roadmap item above.
 
 

@@ -28,7 +28,16 @@ jobs:
           save-if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository || github.event_name != 'pull_request' }}
       - name: Run coverage and tests
         shell: pwsh
-        run: ./scripts/run-coverage.ps1 -HtmlReport -GenerateJUnit -AppendToStepSummary -EnforceBaseline
+        run: ./scripts/run-coverage.ps1 -HtmlReport -GenerateJUnit -AppendToStepSummary -EnforceBaseline -CommentPath target/coverage/comment.md
+      - name: Comment coverage summary
+        if: github.event_name == 'pull_request'
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          body-path: target/coverage/comment.md
+          body-includes: "<!-- daktilo-coverage-report -->"
+          edit-mode: replace
+          token: ${{ github.token }}
       - name: Publish structured test report
         if: always()
         uses: dorny/test-reporter@v2

@@ -14,6 +14,7 @@ tooltip = "Default run-on-login preference consumed by the tray UI and installer
 
 [workspace.metadata.dist.coverage]
 tolerance = 0.25
+pages_url = "https://ndtoan96.github.io/daktilo-tray/"
 
 [workspace.metadata.dist.coverage.baseline]
 lines = 0.0

@@ -5,7 +5,8 @@ param(
     [string]$JUnitDir = "target/test-results",
     [switch]$AppendToStepSummary,
     [switch]$EnforceBaseline,
-    [string]$DistMetadataPath = "dist-workspace.toml"
+    [string]$DistMetadataPath = "dist-workspace.toml",
+    [string]$CommentPath
 )
 
 $ErrorActionPreference = "Stop"
@@ -221,6 +222,10 @@ function Write-CoverageSummary {
     if ($coverageConfig -and $coverageConfig.PSObject.Properties.Name -contains "tolerance") {
         $coverageTolerance = [double]$coverageConfig.tolerance
     }
+    $pagesUrl = $null
+    if ($coverageConfig -and $coverageConfig.PSObject.Properties.Name -contains "pages_url") {
+        $pagesUrl = [string]$coverageConfig.pages_url
+    }
 
     $lines = New-Object System.Collections.Generic.List[string]
     $lines.Add("# Test & Coverage Summary")
@@ -331,7 +336,41 @@ function Write-CoverageSummary {
         CoverageEntries = $coverageEntries
         Baseline = $baseline
         Tolerance = $coverageTolerance
+        PagesUrl = $pagesUrl
     }
+}
+
+function Write-CoverageComment {
+    param(
+        [string]$SummaryMarkdownPath,
+        [string]$CommentPath,
+        [string]$CoverageSiteUrl
+    )
+    if (-not $CommentPath) {
+        return
+    }
+    if (-not (Test-Path $SummaryMarkdownPath)) {
+        throw "Coverage summary Markdown missing at $SummaryMarkdownPath"
+    }
+    $content = (Get-Content $SummaryMarkdownPath -Raw).Trim()
+    if (-not $content) {
+        $content = "_Coverage summary unavailable_"
+    }
+    $commentLines = [System.Collections.Generic.List[string]]::new()
+    $commentLines.Add("<!-- daktilo-coverage-report -->")
+    $commentLines.Add($content)
+    if ($CoverageSiteUrl) {
+        $commentLines.Add("")
+        $commentLines.Add("[View full HTML report]($CoverageSiteUrl)")
+    }
+    $commentLines.Add("")
+    $commentLines.Add("_Posted automatically by scripts/run-coverage.ps1_")
+    $commentDir = Split-Path -Parent $CommentPath
+    if ($commentDir -and -not (Test-Path $commentDir)) {
+        New-Item -ItemType Directory -Path $commentDir -Force | Out-Null
+    }
+    $commentLines | Set-Content -Encoding UTF8 -Path $CommentPath
+    Write-Host "Coverage comment written to $CommentPath"
 }
 
 Require-Command -Name "cargo" -InstallHint "Install Rust via https://rustup.rs/."
@@ -388,6 +427,13 @@ $summaryResult = Write-CoverageSummary `
     -JUnitPath $testResult.JunitPath `
     -ExitCodePath $testResult.ExitCodePath `
     -AppendToStepSummary:$AppendToStepSummary
+
+if ($CommentPath) {
+    Write-CoverageComment `
+        -SummaryMarkdownPath $summaryMarkdownPath `
+        -CommentPath $CommentPath `
+        -CoverageSiteUrl $summaryResult.PagesUrl
+}
 
 if ($EnforceBaseline) {
     Assert-CoverageBudget `
