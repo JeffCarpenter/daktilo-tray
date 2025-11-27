@@ -1,0 +1,83 @@
+#+title: Daktilo Tray Hacking Guide
+#+author: Codex (GPT-5)
+#+date: 2025-11-27
+
+* Meta
+:PROPERTIES:
+:audience: Contributors & release engineers
+:last_verified: 2025-11-27
+:depends_on: AGENTS.md
+:END:
+- Read `AGENTS.md` first for repo etiquette; this file focuses on hands-on workflows and automation.
+- Keep this guide close to source: update it whenever scripts or automation change.
+
+* Environment Bootstrap
+** Toolchain Checklist
+- [ ] Rust stable toolchain (`rustup default stable`)
+- [ ] `cargo-dist` (`cargo install cargo-dist`)
+- [ ] GitHub CLI (`winget install GitHub.cli`) authenticated via `gh auth login`
+- [ ] WiX 3.11 binaries on `PATH` (`wix311-binaries.zip` works fine)
+- [ ] Windows 10+ SDK (for `signtool.exe`)
+- [ ] PowerShell 7+ (`winget install Microsoft.PowerShell`)
+
+** One-liner setup (run inside repo)
+#+begin_src powershell
+./scripts/release-windows.ps1 -SkipSecrets -Repo yourorg/daktilo-tray -PfxPassword dummy
+#+end_src
+This command double-checks the presence of all CLI dependencies and fails loudly with install hints.
+
+* Daily Dev Loop
+** Build & Run
+- `cargo fmt && cargo clippy --all-targets --all-features`
+- `cargo run --release` for realistic audio timing
+- `cargo check` before committing (captures serde/state regressions quickly)
+
+** Cache + state notes
+- Runtime cache: `%LOCALAPPDATA%/daktilo_tray_cache.toml`; delete it when presets or device names drift.
+- `State` serialization changes require version notes in PRs (because tray cache and release behavior rely on it).
+
+* Release Automation
+** Fast path (full release, cert export + signing + tagging)
+#+begin_src powershell
+pwsh scripts/release-windows.ps1 \
+  -SubjectName "CN=Your Company" \
+  -StoreLocation LocalMachine \
+  -PfxPassword 'Sup3rS3cret!' \
+  -Repo yourorg/daktilo-tray \
+  -Tag v0.2.0
+#+end_src
+Steps performed:
+1. Export matching cert from Windows cert store (use `-Thumbprint` for precision)
+2. Base64 encode + push `WINDOWS_CODESIGN_*` secrets via `gh secret set`
+3. Write `.codesign.env` snapshot for local signing
+4. `dist build --allow-dirty --installer msi` (targets from `dist-workspace.toml`)
+5. Sign all `.exe`/`.msi`/`.zip` outputs with `scripts/sign-windows.ps1`
+6. Create/push git tag if `-Tag` provided
+
+** Reusing secrets for iterative smoke tests
+#+begin_src powershell
+pwsh scripts/release-windows.ps1 -SkipSecrets -Repo yourorg/daktilo-tray -PfxPassword 'Sup3rS3cret!'
+#+end_src
+(Uses existing `.codesign.env`, so nothing touches the cert store.)
+
+** Manual knobs
+- `scripts/bootstrap-codesign.ps1`: export + secret publication only
+- `scripts/prepare-codesign-secrets.ps1`: use when you already have a `.pfx` file on disk
+- `scripts/sign-windows.ps1`: sign arbitrary artifacts given base64 + password
+
+* Dist + Packaging Notes
+- `dist-workspace.toml` is the authoritative source for installers and targets; keep `targets` trimmed to what you can sign.
+- After editing dist metadata, run `dist generate` to refresh `.github/workflows/release.yml` and `wix/main.wxs`.
+- CI expects WiX + signtool on Windows runners; locally mimic this with `tools/wix311/bin` before invoking `dist build`.
+
+* Troubleshooting
+** Signing fails with "signtool.exe not found"
+- Confirm Windows SDK `bin` path is on `PATH`; rerun `pwsh scripts/release-windows.ps1 -SkipSecrets ...` after fixing.
+** GitHub secrets rejected
+- `gh auth status` must show valid scopes; re-auth with `gh auth login`.
+** MSI build fails due to outdated workflow
+- Run `dist init --yes` (or `dist generate`) and recommit the regenerated files.
+
+* Change Control
+- Whenever you touch `scripts/*.ps1` or `dist-workspace.toml`, update this guide and add an entry to `WORK.org`.
+- Keep `.codesign.env` out of git (already in `.gitignore`); rotate secrets if it leaks.

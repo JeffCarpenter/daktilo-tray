@@ -29,3 +29,6 @@
 ## Assets & Configuration Tips
 - New assets must be added to `assets/` and referenced in `main.rs` via `include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/..."))`
 - Runtime state serializes to the cache file created via `directories::BaseDirs`; update `State` serialization whenever fields change
+
+## Additional References
+- See `HACKING.org` for environment bootstrapping, release automation, and script-level workflows.***
