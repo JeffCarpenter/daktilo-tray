@@ -12,6 +12,12 @@ default_enabled = true
 menu_label = "Launch Daktilo Tray at login"
 tooltip = "Default run-on-login preference consumed by the tray UI and installers."
 
+[workspace.metadata.dist.coverage.baseline]
+lines = 0.0
+regions = 0.0
+functions = 0.0
+
+
 [workspace.metadata.dist.codesign]
 # Codesign channels let scripts choose the right cert defaults with -Channel.
 default_channel = "dev"

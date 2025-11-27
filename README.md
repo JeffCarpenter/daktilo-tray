@@ -55,9 +55,9 @@ cargo install daktilo-tray
 - Maintain `.pants-ignore` with the OSS Index vulnerability IDs you have accepted so the helper (and CI) stays green while you work on patches.
 
 # Coverage
-- Run `pwsh scripts/run-coverage.ps1 -HtmlReport` to produce `target/coverage/lcov.info` plus an HTML dashboard (under `target/coverage/html`) via `cargo llvm-cov`. The helper ensures `cargo-llvm-cov` is installed, cleans stale instrumentation, and fails fast if the LCOV output is missing.
-- `.github/workflows/coverage.yml` executes the same helper on `windows-latest` for every PR and `main` push. Review the uploaded artifact (`coverage-<run-id>`) to inspect LCOV/HTML outputs or forward the LCOV file to Codecov/coveralls if you add tokens later.
-- Each run also appends a Markdown snippet to the GitHub job summary via `$GITHUB_STEP_SUMMARY`, so coverage deltas are visible directly in the Actions UI (GitHub caps summaries at 1 MiB per step, which our helper stays well under). citeturn0search6
+- Run `pwsh scripts/run-coverage.ps1 -HtmlReport -GenerateJUnit` to reset instrumentation, execute the workspace, emit `target/coverage/lcov.info`, build the HTML dashboard (`target/coverage/html`), and capture the JSON/JUnit/exit-code bundle under `target/coverage` and `target/test-results`. The helper installs `cargo-llvm-cov`/`cargo2junit` when missing, fails fast if artifacts are absent, and leaves behind the Markdown summary consumed by CI.
+- `.github/workflows/coverage.yml` runs the same helper on `windows-latest`, then feeds `target/test-results/junit.xml` into `dorny/test-reporter@v2` so pull requests get a structured test check alongside the uploaded `coverage-<run-id>` artifact (LCOV, HTML, JSON, JUnit).
+- The helper also rewrites `target/coverage/summary.md` and appends it to `$GITHUB_STEP_SUMMARY`, so reviewers see coverage/test deltas inline without digging through logs; GitHub caps each summary at 1 MiB, which the script respects by emitting a terse table.
 
 # ACME Bootstrap / Let's Encrypt + Caddy
 - `scripts/request-acme-pfx.ps1` automates spinning up `caddy run`, acquiring a Let's Encrypt (or staging) TLS certificate for `sign.yourdomain.com`, and writing a password-protected PFX you can stash as part of your release secrets. This is ideal for staging and for proving domain control to a commercial Authenticode CA.
@@ -83,3 +83,8 @@ cargo install daktilo-tray
 - [ ] Auto detect new audio devices
 - [ ] Global shortcut
 - [ ] Support other installation methods (nix, winget,...)
+
+
+
+
+

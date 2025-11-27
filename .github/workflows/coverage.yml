@@ -11,6 +11,7 @@ jobs:
     runs-on: windows-latest
     permissions:
       contents: read
+      checks: write
     steps:
       - uses: actions/checkout@v4
       - name: Install Rust toolchain
@@ -19,26 +20,42 @@ jobs:
           components: llvm-tools-preview
       - name: Install cargo-llvm-cov
         run: cargo install cargo-llvm-cov --locked
+      - name: Install cargo2junit
+        run: cargo install cargo2junit --locked
       - name: Prime cargo cache
         uses: Swatinem/rust-cache@v2
         with:
           save-if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository || github.event_name != 'pull_request' }}
-      - name: Run coverage
+      - name: Run coverage and tests
         shell: pwsh
-        run: ./scripts/run-coverage.ps1 -HtmlReport
-      - name: Publish coverage summary
+        run: ./scripts/run-coverage.ps1 -HtmlReport -GenerateJUnit -AppendToStepSummary
+      - name: Publish structured test report
+        if: always()
+        uses: dorny/test-reporter@v2
+        with:
+          name: Rust Tests
+          path: target/test-results/junit.xml
+          reporter: java-junit
+          fail-on-error: true
+          fail-on-empty: false
+          path-replace-backslashes: true
+      - name: Enforce test result
         if: always()
         shell: pwsh
         run: |
-          $summaryPath = Join-Path $PWD "target/coverage/summary.md"
-          if (Test-Path $summaryPath) {
-            Get-Content $summaryPath | Out-String >> $env:GITHUB_STEP_SUMMARY
-          } else {
-            "Coverage summary missing at $summaryPath" >> $env:GITHUB_STEP_SUMMARY
+          $exitPath = "target/test-results/exit-code.txt"
+          if (-not (Test-Path $exitPath)) {
+            throw "Test exit code file missing at $exitPath"
           }
-      - name: Upload coverage artifact
+          $code = [int](Get-Content $exitPath -Raw)
+          if ($code -ne 0) {
+            throw "cargo test exited with code $code"
+          }
+      - name: Upload coverage artifacts
         uses: actions/upload-artifact@v4
         with:
           name: coverage-${{ github.run_id }}
-          path: target/coverage
+          path: |
+            target/coverage
+            target/test-results
           retention-days: 7

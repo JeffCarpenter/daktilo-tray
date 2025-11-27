@@ -96,8 +96,8 @@ pwsh scripts/release-windows.ps1 -SkipSecrets -Repo yourorg/daktilo-tray -PfxPas
 - Use `.pants-ignore` to squash already triaged CVEs; the helper respects `--dev` when `include_dev_dependencies = true` in the dist metadata.
 
 ** Coverage drill
-- Install `cargo-llvm-cov` (`cargo install cargo-llvm-cov --locked`), then run `pwsh scripts/run-coverage.ps1 -HtmlReport` to reset instrumentation, execute the workspace, and emit both `target/coverage/lcov.info` and an HTML dashboard under `target/coverage/html`.
-- `.github/workflows/coverage.yml` executes the same helper on every PR + `main` push, uploads the coverage folder as an artifact, and streams a Markdown snapshot into `$GITHUB_STEP_SUMMARY` so you can review headline numbers without downloading artifacts. Keep each summary under the 1 MiB GitHub limit by sticking to the generated table.
+- Install `cargo-llvm-cov` and `cargo2junit` (`cargo install cargo-llvm-cov --locked && cargo install cargo2junit --locked`), then run `pwsh scripts/run-coverage.ps1 -HtmlReport -GenerateJUnit -AppendToStepSummary` to clean instrumentation, execute the workspace, and emit the LCOV/HTML/JUnit/exit-code bundle under `target/coverage` and `target/test-results`.
+- `.github/workflows/coverage.yml` calls the same helper on `windows-latest`, feeds the generated JUnit file into `dorny/test-reporter@v2` for PR annotations, appends the Markdown summary to `$GITHUB_STEP_SUMMARY`, and uploads the combined artifact so you can drill into LCOV/HTML/JUnit locally. Keep the summary lean so it stays under GitHub's 1 MiB per-step limit.
 
 * Dist + Packaging Notes
 - `dist-workspace.toml` is the authoritative source for installers and targets; keep `targets` trimmed to what you can sign.
@@ -115,3 +115,6 @@ pwsh scripts/release-windows.ps1 -SkipSecrets -Repo yourorg/daktilo-tray -PfxPas
 * Change Control
 - Whenever you touch `scripts/*.ps1` or `dist-workspace.toml`, update this guide and add an entry to `WORK.org`.
 - Keep `.codesign.env` out of git (already in `.gitignore`); rotate secrets if it leaks.
+
+
+

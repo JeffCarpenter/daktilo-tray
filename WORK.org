@@ -162,3 +162,8 @@
 ** 2025-11-27T21:00:00-06:00 ACME workflow hardening
 - Introduced an environment_name input + GitHub environment binding to .github/workflows/acme-pfx.yml and granted secrets:write so runs require the protected env gate.
 - Injected gh secret set into the issuance step so WINDOWS_CODESIGN_* secrets are promoted directly into the requested environment whenever a new Let's Encrypt PFX is minted.
+** 2025-11-27T21:45:00-06:00 Coverage reporting automation
+- Rebuilt scripts/run-coverage.ps1 so a single invocation handles LCOV/HTML generation, JUnit export (via cargo2junit), exit-code capture, and Markdown rendering tied back to the new dist metadata baseline.
+- Updated .github/workflows/coverage.yml to install cargo2junit, run the helper with -GenerateJUnit/-AppendToStepSummary, feed the resulting junit.xml into dorny/test-reporter@v2, and gate the job on the recorded exit code before uploading artifacts.
+- Touched README.md + HACKING.org so contributors know to pass -GenerateJUnit locally and understand why the workflow now surfaces test summaries via $GITHUB_STEP_SUMMARY instead of ad-hoc log scraping.
+
