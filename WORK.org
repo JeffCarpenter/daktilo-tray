@@ -1,0 +1,39 @@
+#+title: Daktilo Tray WORKLOG
+#+author: Codex (GPT-5)
+#+date: 2025-11-27
+
+* Metadata
+:PROPERTIES:
+:repo: daktilo-tray
+:goal: Add run-on-login/startup toggle driven by release metadata.
+:constraints: Must use cargo-dist config, auto launch should be user friendly, log progress here.
+:END:
+
+* Research Notes
+** Auto-launch RTFM
+- auto-launch 0.5.0 gives cross-platform registry/LaunchAgent helpers; Windows implementation writes HKCU Run; API surface: `AutoLaunchBuilder::new().set_app_name().set_app_path().set_args().build()` plus `enable/disable/is_enabled`.
+- We'll reuse `auto_launch::AutoLaunch::is_support()` to guard menu visibility; errors bubble via crate's `Error` enum.
+** cargo-dist knobs
+- `cargo-dist` consumes `[workspace.metadata.dist]` either inside `Cargo.toml` or `dist-workspace.toml`; we can extend that table with nested `[workspace.metadata.dist.autostart]` describing defaults without breaking dist tooling.
+- We'll read that TOML during build/runtime (via `include_str!`) to feed default autostart preference + prompt copy so release metadata is the single source of truth.
+
+* Plan
+** Milestones
+1. Document plan + default values from dist config (this section, `WORK.org`).
+2. Implement runtime autostart manager + tray menu toggle; persist state.
+3. Wire release metadata + README/docs so cargo-dist builds know about the feature.
+** Task Breakdown
+- [ ] Parse `dist-workspace.toml` for `[workspace.metadata.dist.autostart]` defaults (fallback to safe values if missing).
+- [ ] Create `AutostartController` abstraction using `auto-launch` (only instantiate on supported OS) that exposes `current()` and `set(bool)`.
+- [ ] Extend cached `State` with `run_on_login` and serialize.
+- [ ] Add tray checkbox + event handling that syncs UI, `State`, controller errors, and logs.
+- [ ] Persist updated state on exit along with new field.
+- [ ] Update Cargo manifest (dependencies + metadata) and add `dist-workspace.toml` capturing release knobs + human-friendly copy.
+- [ ] Document feature in README (usage + how to set default via dist config) and recap changes here once done.
+
+* Log
+** 2025-11-27T10:15:00-06:00 Kickoff
+- Captured requirements + doc pointers; plan ready.
+** 2025-11-27T11:05:00-06:00 Implementation
+- Added auto-launch integration, state persistence, and tray toggle; default wiring reads from dist-workspace.toml.
+- Created dist-workspace metadata + README instructions; ran `cargo fmt` + `cargo check` (warnings only from upstream). 

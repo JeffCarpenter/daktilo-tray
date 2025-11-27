@@ -13,11 +13,16 @@ Pre-built binaries are provided at [release](https://github.com/ndtoan96/daktilo
 cargo install daktilo-tray
 ```
 
+## Launch at Login
+- Toggle the new **Launch Daktilo Tray at login** checkbox from the tray menu to register or remove the app from the OS startup list. The preference is cached next to the rest of the tray state so it survives restarts.
+- The default behavior for fresh installs is sourced from `dist-workspace.toml` under `[workspace.metadata.dist.autostart]`. This keeps the runtime and cargo-dist release metadata in sync—flip `default_enabled` there if you want installers to opt users in or out by default, then rebuild.
+
 # Roadmap
 - [X] Change preset in realtime
 - [X] Change output device in realtime
 - [X] Enable/disable app
 - [X] Caching app state
+- [X] Launch at login toggle
 - [ ] Configure custom presets
 - [ ] Auto detect new audio devices
 - [ ] Global shortcut

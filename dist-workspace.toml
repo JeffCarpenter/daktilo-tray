@@ -1,0 +1,10 @@
+[workspace.metadata.dist]
+cargo-dist-version = "0.25.0"
+ci = ["github"]
+installers = ["powershell", "shell", "msi"]
+targets = ["x86_64-pc-windows-msvc"]
+
+[workspace.metadata.dist.autostart]
+default_enabled = true
+menu_label = "Launch Daktilo Tray at login"
+tooltip = "Default run-on-login preference consumed by the tray UI and installers."
