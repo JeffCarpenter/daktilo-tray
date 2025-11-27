@@ -1,2 +1,3 @@
 /target
 resource.rc
+.codesign.env

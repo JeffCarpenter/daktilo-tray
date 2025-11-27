@@ -19,6 +19,7 @@ cargo install daktilo-tray
 
 ## Code Signing
 - Releases are built with `cargo-dist`'s MSI pipeline and a follow-up PowerShell script (`scripts/sign-windows.ps1`) that runs `signtool.exe` over every `.exe` and `.msi` artifact. Add these GitHub Actions secrets so CI can import your certificate: `WINDOWS_CODESIGN_PFX` (base64-encoded PFX blob) and `WINDOWS_CODESIGN_PASSWORD` (the PFX password). The workflow skips signing automatically if either secret is absent, which makes unsigned PR builds trivial.
+- Use `scripts/prepare-codesign-secrets.ps1 -PfxPath path/to/authenticode.pfx -PfxPassword 'supersecret' -Repo owner/repo` to base64-encode your certificate, push both secrets via `gh secret set`, and drop a local `.codesign.env` file for manual runs. This script expects the [GitHub CLI](https://cli.github.com/) to be installed and authenticated.
 - To test locally, install the Windows SDK (for `signtool`) and WiX, export your codesigning certificate to `authenticode.pfx`, and convert it into base64 with `certutil -encode authenticode.pfx authenticode.pfx.b64`. Feed those values to the script manually (`$env:WINDOWS_CODESIGN_PFX = Get-Content authenticode.pfx.b64 -Raw; $env:WINDOWS_CODESIGN_PASSWORD = '...'; pwsh scripts/sign-windows.ps1 -ArtifactsDir target/distrib -BinaryDir target/dist -PfxBase64 $env:WINDOWS_CODESIGN_PFX -PfxPassword $env:WINDOWS_CODESIGN_PASSWORD`) right after running `dist build --installer msi`.
 
 # Roadmap

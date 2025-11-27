@@ -42,3 +42,5 @@
 - Regenerated release CI, provisioned WiX locally, and ran `dist build --installer msi` to validate the pipeline end-to-end.
 ** 2025-11-27T12:40:00-06:00 Signtool Migration
 - Replaced SSL.com integration with a local `signtool` workflow (scripts/sign-windows.ps1) and documented the new `WINDOWS_CODESIGN_*` secrets plus local testing steps.
+** 2025-11-27T13:00:00-06:00 Secret Automation
+- Added scripts/prepare-codesign-secrets.ps1 plus README/.gitignore updates so `gh` can ingest the PFX + password and stash a local .codesign.env for deterministic signing runs.
