@@ -44,3 +44,5 @@
 - Replaced SSL.com integration with a local `signtool` workflow (scripts/sign-windows.ps1) and documented the new `WINDOWS_CODESIGN_*` secrets plus local testing steps.
 ** 2025-11-27T13:00:00-06:00 Secret Automation
 - Added scripts/prepare-codesign-secrets.ps1 plus README/.gitignore updates so `gh` can ingest the PFX + password and stash a local .codesign.env for deterministic signing runs.
+** 2025-11-27T13:20:00-06:00 Release Wizard
+- Added scripts/release-windows.ps1 so a single command exports the cert, uploads secrets, runs cargo-dist, signs artifacts, and optionally tags the repo; README now documents the exact invocation.
