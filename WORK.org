@@ -129,7 +129,7 @@
 * Forward Plan
 :PROPERTIES:
 :owner: Codex
-:last_reviewed: 2025-11-27T23:50:00-06:00
+:last_reviewed: 2025-11-28T12:05:00-06:00
 :intent: Hardening + coverage
 :END:
 ** Automation Worklist
@@ -143,6 +143,10 @@
 - [X] *Built-in reporting*: added the `scripts/run-coverage.ps1` helper that emits LCOV/HTML/JSON, rolls the coverage+test deltas into summary.md, and appends the Markdown directly to `$GITHUB_STEP_SUMMARY` when available.
 - [X] *JUnit plumbing*: wired `dorny/test-reporter@v2` into `.github/workflows/coverage.yml` so the generated `target/test-results/junit.xml` feeds structured test annotations on every PR, with fork-friendly `fail-on-empty` semantics captured in docs.
 - [X] *Release workflow parity*: reran `dist init --yes` to refresh `.github/workflows/release.yml`, restored the cargo-pants/sign/smoke hooks atop the latest template, and taught `scripts/release-windows.ps1` to enforce a clean tree (opt-in `-AllowDirty` remains for local overrides).
+** 2025-11-28T12:05:00-06:00 Plan refresh
+- [ ] Reconcile `.github/workflows/release.yml` with the current cargo-dist template while preserving cargo-pants, signtool, and installer smoke hooks so `dist build` can drop `--allow-dirty`.
+- [ ] Teach `scripts/test-installer.ps1` + CI smoke job to read channel metadata (subject/thumbprint expectations) and emit structured signtool logs for GitHub annotations.
+- [ ] Bake ACME profile validation into CI (lint `dist-workspace.toml` to ensure tokens/domains are set) so release promotion fails fast when metadata drifts.
 ** Coverage Roadmap
 :PROPERTIES:
 :status: in_review
@@ -199,5 +203,17 @@
 ** 2025-11-27T16:45:00-08:00 Smoke rehearsal
 - Ran `pwsh scripts/release-windows.ps1 -Channel dev -SubjectName "CN=Daktilo Tray AutoTest" -AllowDirty -SkipGitHubSecrets -DistArgs '--help' -EnvFile .codesign.autoprov.env` to force the new automation path without kicking off a real release.
 - Script minted a throwaway dev cert automatically, refreshed a dedicated `.codesign.autoprov.env`, and still exercised the signing phase—proves zero-touch smoke tests now work locally.
+
+** 2025-11-28T09:35:00-08:00 Next steps plan
+- Automate real CA bootstrap: extend `dist-workspace.toml` channel metadata (stable first) with an `acme_profile` that lists domains + DNS provider hints, then teach `scripts/release-windows.ps1` to invoke `scripts/request-acme-pfx.ps1` whenever the selected channel's metadata marks `auto_provision.mode = "acme"`. Persist the minted `.pfx` into the channel's `env_file` and document the flow in HACKING.org.
+- Reconcile `.github/workflows/release.yml` with the latest `cargo-dist` template so we can drop the lingering `--allow-dirty` workarounds in CI while still injecting cargo-pants, signing, and installer-smoke stages. Strategy: re-run `dist generate`, layer our custom steps via a composite action or helper script, and validate on a dry-run GitHub workflow dispatch.
+- Harden installer smoke tooling to honor channel metadata: enhance `scripts/test-installer.ps1` to read the resolved channel from `dist-workspace.toml`, verify the MSI picked the expected certificate (subject/thumbprint) via `signtool verify`, and export structured logs so GitHub Actions can surface failures inline.
+
+** 2025-11-28T12:05:00-06:00 ACME auto-bootstrap delivery
+- Added `[workspace.metadata.dist.codesign.channels.stable.auto_provision]` with `mode = "acme"` plus a new `[workspace.metadata.dist.acme_profiles.prod]` that captures the target domain (`codesign.daktilo-tray.dev`), Let's Encrypt contact, Cloudflare DNS provider hints, cache directory, and timeout defaults. Dev channel metadata now pins `mode = "self_signed"` to preserve existing behavior.
+- Extended `scripts/common-dist.ps1` with `Get-AcmeProfile` so every PowerShell helper can look up ACME metadata without re-parsing TOML.
+- Refactored `scripts/release-windows.ps1` to understand `auto_provision.mode`. When a channel opts into `acme`, the release wizard now drives `request-acme-pfx.ps1`, imports the issued PFX into the configured cert store, and pipes it through `prepare-codesign-secrets.ps1` so `.codesign*.env` (and optional GitHub secrets) refresh automatically before `dist build` runs. The script enforces Cloudflare token/env pre-reqs, updates the resolved thumbprint before signing, and only falls back to `bootstrap-codesign.ps1` when ACME provisioning was skipped.
+- Documented the new metadata knobs, env vars, and admin requirements in `HACKING.org` under the ACME bootstrap section so operators know how to opt-in/out per channel and how to override defaults.
+- Ran `cargo build` to validate the workspace after the scripting changes; build succeeded with the existing upstream warnings from `daktilo_lib`.
 
 

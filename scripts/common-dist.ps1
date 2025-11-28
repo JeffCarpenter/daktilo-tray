@@ -108,6 +108,29 @@ function Get-CodesignProfile {
     return $null
 }
 
+function Get-AcmeProfile {
+    [CmdletBinding()]
+    param(
+        [psobject]$Metadata,
+        [string]$Name
+    )
+
+    if (-not $Metadata -or -not $Name) { return $null }
+    $profiles = $Metadata.workspace.metadata.dist.acme_profiles
+    if (-not $profiles) { return $null }
+
+    foreach ($prop in $profiles.PSObject.Properties) {
+        if ($prop.Name -ieq $Name) {
+            return [pscustomobject]@{
+                Name     = $prop.Name
+                Settings = $prop.Value
+            }
+        }
+    }
+
+    return $null
+}
+
 function Get-SupplyChainPolicy {
     [CmdletBinding()]
     param(

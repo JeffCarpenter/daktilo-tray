@@ -37,6 +37,7 @@ env_file = ".codesign.dev.env"
 
 [workspace.metadata.dist.codesign.channels.dev.auto_provision]
 enabled = true
+mode = "self_signed"
 valid_days = 365
 hash_algorithm = "SHA256"
 key_length = 4096
@@ -45,10 +46,27 @@ key_length = 4096
 description = "Publicly trusted cert stored in the LocalMachine store (imported from your CA)"
 store = "My"
 store_location = "LocalMachine"
+subject = "CN=codesign.daktilo-tray.dev"
 thumbprint = "REPLACE_WITH_PROD_CERT_THUMBPRINT"
 repo = "ndtoan96/daktilo-tray"
 environment = "codesign-prod"
 env_file = ".codesign.env"
+
+[workspace.metadata.dist.codesign.channels.stable.auto_provision]
+enabled = true
+mode = "acme"
+acme_profile = "prod"
+import_to_store = true
+
+[workspace.metadata.dist.acme_profiles.prod]
+email = "ops@daktilo-tray.dev"
+domains = ["codesign.daktilo-tray.dev"]
+dns_provider = "cloudflare"
+cloudflare_token_env = "CLOUDFLARE_DNS_API_TOKEN"
+state_dir = "target/acme-prod"
+caddy_command = "caddy"
+use_staging = false
+timeout_seconds = 900
 
 [workspace.metadata.dist.supply_chain]
 pants_threshold = 7.0

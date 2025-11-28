@@ -89,6 +89,162 @@ function New-SelfSignedCodeSigningCert {
     return $cert
 }
 
+function Resolve-WorkspacePath {
+    param(
+        [string]$Path,
+        [switch]$EnsureDirectory
+    )
+
+    if (-not $Path) { return $null }
+    $resolved = $Path
+    if (-not [System.IO.Path]::IsPathRooted($Path)) {
+        $repoRoot = (Resolve-Path (Join-Path -Path $PSScriptRoot -ChildPath "..")).Path
+        $resolved = Join-Path -Path $repoRoot -ChildPath $Path
+    }
+    if ($EnsureDirectory -and -not (Test-Path $resolved)) {
+        New-Item -ItemType Directory -Path $resolved -Force | Out-Null
+    }
+    return $resolved
+}
+
+function Invoke-AcmeProvisioning {
+    [CmdletBinding()]
+    param(
+        [psobject]$Metadata,
+        [psobject]$AutoSettings,
+        [string]$Store,
+        [string]$StoreLocation,
+        [string]$PfxPassword,
+        [string]$Repo,
+        [string]$EnvFile,
+        [string]$Environment,
+        [switch]$SkipGitHubSecrets
+    )
+
+    if (-not $AutoSettings) {
+        throw "ACME auto-provisioning requested but no settings were provided."
+    }
+    $profileName = $AutoSettings.acme_profile
+    if (-not $profileName) {
+        throw "ACME auto-provisioning requires 'acme_profile' metadata."
+    }
+
+    $profile = Get-AcmeProfile -Metadata $Metadata -Name $profileName
+    if (-not $profile) {
+        throw "ACME profile '$profileName' not found in dist metadata."
+    }
+    $settings = $profile.Settings
+    $domains = @($settings.domains)
+    if (-not $domains -or $domains.Count -eq 0) {
+        throw "ACME profile '$profileName' must declare at least one domain."
+    }
+    if (-not $settings.email) {
+        throw "ACME profile '$profileName' must declare an email address."
+    }
+
+    $requestScript = Join-Path -Path $PSScriptRoot -ChildPath "request-acme-pfx.ps1"
+    if (-not (Test-Path $requestScript)) {
+        throw "Missing helper script: $requestScript"
+    }
+
+    $pfxOutputDir = Resolve-WorkspacePath -Path "target\\acme-outputs" -EnsureDirectory
+    $pfxPath = Join-Path -Path $pfxOutputDir -ChildPath ("acme-" + $profile.Name + "-" + (Get-Date -Format "yyyyMMddHHmmss") + ".pfx")
+
+    $acmeArgs = @{
+        Domains    = $domains
+        Email      = [string]$settings.email
+        OutputPfx  = $pfxPath
+        PfxPassword = $PfxPassword
+    }
+    if ($settings.state_dir) {
+        $acmeArgs.StateDir = Resolve-WorkspacePath -Path ([string]$settings.state_dir) -EnsureDirectory
+    }
+    if ($settings.caddy_command) {
+        $acmeArgs.CaddyCommand = [string]$settings.caddy_command
+    }
+    if ($settings.acme_server) {
+        $acmeArgs.AcmeServer = [string]$settings.acme_server
+    }
+    if ($settings.use_staging) {
+        $acmeArgs.UseStaging = [bool]$settings.use_staging
+    }
+    if ($settings.timeout_seconds) {
+        $acmeArgs.TimeoutSeconds = [int]$settings.timeout_seconds
+    }
+    if ($settings.dns_provider) {
+        $acmeArgs.DnsProvider = [string]$settings.dns_provider
+        if ($settings.dns_provider -ieq "cloudflare") {
+        $tokenEnv = [string]$settings.cloudflare_token_env
+        if (-not $tokenEnv) {
+            throw "ACME profile '$($profile.Name)' uses the Cloudflare DNS provider but did not declare 'cloudflare_token_env'."
+        }
+        $tokenValue = [Environment]::GetEnvironmentVariable($tokenEnv)
+        if (-not $tokenValue) {
+                throw "Environment variable '$tokenEnv' is not set. Export your Cloudflare token before running the release script."
+            }
+            $acmeArgs.CloudflareApiToken = $tokenValue
+        }
+    }
+
+    $result = $null
+    try {
+        Write-Host "Auto-provisioning ACME certificate via profile '$($profile.Name)' (domains: $($domains -join ', '))."
+        & $requestScript @acmeArgs
+
+        if (-not (Test-Path $pfxPath)) {
+            throw "ACME provisioning failed; expected PFX at $pfxPath."
+        }
+
+        $importedThumbprint = $null
+        $importToStore = $true
+        if ($AutoSettings.PSObject.Properties.Name -contains "import_to_store") {
+            $importToStore = [bool]$AutoSettings.import_to_store
+        }
+        if ($importToStore) {
+            $targetStore = $Store
+            if (-not $targetStore) { $targetStore = "My" }
+            $targetStoreLocation = $StoreLocation
+            if (-not $targetStoreLocation) { $targetStoreLocation = "LocalMachine" }
+            $storePath = "Cert:\$targetStoreLocation\$targetStore"
+            $securePass = ConvertTo-SecureString -String $PfxPassword -AsPlainText -Force
+            $importResult = Import-PfxCertificate -FilePath $pfxPath -CertStoreLocation $storePath -Password $securePass -Exportable -ErrorAction Stop
+            $importedCert = $importResult | Select-Object -First 1
+            if (-not $importedCert) {
+                throw "Import-PfxCertificate did not return a cert for $pfxPath."
+            }
+            $importedThumbprint = $importedCert.Thumbprint
+            Write-Host "Imported ACME certificate into $storePath (thumbprint $importedThumbprint)."
+        }
+
+        $prepareScript = Join-Path -Path $PSScriptRoot -ChildPath "prepare-codesign-secrets.ps1"
+        if (-not (Test-Path $prepareScript)) {
+            throw "Missing helper script: $prepareScript"
+        }
+        $prepareArgs = @{
+            PfxPath     = $pfxPath
+            PfxPassword = $PfxPassword
+            EnvFile     = $EnvFile
+        }
+        if ($Repo) { $prepareArgs.Repo = $Repo }
+        if ($Environment) { $prepareArgs.Environment = $Environment }
+        if ($SkipGitHubSecrets) { $prepareArgs.SkipGitHubSecrets = $true }
+        & $prepareScript @prepareArgs
+
+        $result = [pscustomobject]@{
+            Thumbprint      = $importedThumbprint
+            SecretsPrepared = $true
+            ImportedToStore = $importToStore
+        }
+    }
+    finally {
+        if (Test-Path $pfxPath) {
+            Remove-Item -LiteralPath $pfxPath -Force
+        }
+    }
+
+    return $result
+}
+
 Require-Command -Name "gh" -InstallHint "Install GitHub CLI from https://cli.github.com/."
 Require-Command -Name "dist" -InstallHint "Install cargo-dist via 'cargo install cargo-dist' or see https://github.com/axodotdev/cargo-dist." 
 try {
@@ -98,6 +254,11 @@ try {
     throw $_
 }
 Require-Command -Name "git" -InstallHint "Install Git for Windows."
+
+$autoProvisionConfig = $null
+$autoProvisionMode = "self_signed"
+$autoProvisionImportPreference = $true
+$autoProvisionAcmeProfile = $null
 
 $metadata = $null
 try {
@@ -139,6 +300,7 @@ if ($metadata) {
                     $AutoProvision = [bool]$autoSettings
                 }
             } elseif ($autoSettings.PSObject.Properties.Count -gt 0) {
+                $autoProvisionConfig = $autoSettings
                 if (-not $PSBoundParameters.ContainsKey("AutoProvision") -and $autoSettings.enabled -ne $null) {
                     $AutoProvision = [bool]$autoSettings.enabled
                 }
@@ -150,6 +312,15 @@ if ($metadata) {
                 }
                 if (-not $PSBoundParameters.ContainsKey("AutoProvisionKeyLength") -and $autoSettings.key_length) {
                     $AutoProvisionKeyLength = [int]$autoSettings.key_length
+                }
+                if ($autoSettings.mode) {
+                    $autoProvisionMode = [string]$autoSettings.mode
+                }
+                if ($autoSettings.import_to_store -ne $null) {
+                    $autoProvisionImportPreference = [bool]$autoSettings.import_to_store
+                }
+                if ($autoSettings.acme_profile) {
+                    $autoProvisionAcmeProfile = [string]$autoSettings.acme_profile
                 }
             }
         }
@@ -171,43 +342,79 @@ if (-not (Test-Path $bootstrapScript)) {
     throw "Missing helper script: $bootstrapScript"
 }
 
+$secretsPrepared = $false
 if (-not $SkipSecrets) {
     $certificateExists = Test-CertificateExists -SubjectName $SubjectName -Thumbprint $Thumbprint -Store $Store -StoreLocation $StoreLocation
     if (-not $certificateExists -and $AutoProvision) {
-        if (-not $SubjectName) {
-            throw "Auto-provisioning needs -SubjectName to synthesize a cert."
+        if ($autoProvisionMode -ieq "acme") {
+            if (-not $autoProvisionConfig) {
+                throw "ACME mode selected but no auto_provision settings found in dist metadata."
+            }
+            if (-not $autoProvisionAcmeProfile) {
+                throw "ACME mode requires 'acme_profile' under the selected channel."
+            }
+            if (-not $SkipGitHubSecrets -and -not $Repo) {
+                throw "ACME provisioning publishes secrets; provide -Repo or declare it in dist metadata."
+            }
+            $acmeResult = Invoke-AcmeProvisioning `
+                -Metadata $metadata `
+                -AutoSettings $autoProvisionConfig `
+                -Store $Store `
+                -StoreLocation $StoreLocation `
+                -PfxPassword $PfxPassword `
+                -Repo $Repo `
+                -EnvFile $EnvFile `
+                -Environment $Environment `
+                -SkipGitHubSecrets:$SkipGitHubSecrets
+            if ($acmeResult.Thumbprint) {
+                $Thumbprint = $acmeResult.Thumbprint
+            }
+            if ($acmeResult.SecretsPrepared) {
+                $secretsPrepared = $true
+            }
+            if ($acmeResult.ImportedToStore) {
+                $certificateExists = Test-CertificateExists -SubjectName $SubjectName -Thumbprint $Thumbprint -Store $Store -StoreLocation $StoreLocation
+            } else {
+                $certificateExists = $secretsPrepared
+            }
+        } else {
+            if (-not $SubjectName) {
+                throw "Auto-provisioning needs -SubjectName to synthesize a cert."
+            }
+            New-SelfSignedCodeSigningCert `
+                -SubjectName $SubjectName `
+                -Store $Store `
+                -StoreLocation $StoreLocation `
+                -ValidDays $AutoProvisionValidDays `
+                -KeyLength $AutoProvisionKeyLength `
+                -HashAlgorithm $AutoProvisionHashAlgorithm | Out-Null
+            $certificateExists = Test-CertificateExists -SubjectName $SubjectName -Thumbprint $Thumbprint -Store $Store -StoreLocation $StoreLocation
         }
-        New-SelfSignedCodeSigningCert `
-            -SubjectName $SubjectName `
-            -Store $Store `
-            -StoreLocation $StoreLocation `
-            -ValidDays $AutoProvisionValidDays `
-            -KeyLength $AutoProvisionKeyLength `
-            -HashAlgorithm $AutoProvisionHashAlgorithm | Out-Null
-        $certificateExists = Test-CertificateExists -SubjectName $SubjectName -Thumbprint $Thumbprint -Store $Store -StoreLocation $StoreLocation
     }
 
     if (-not $certificateExists) {
         throw "No matching certificate found in Cert:\$StoreLocation\$Store. Provide -Thumbprint or run scripts/provision-dev-cert.ps1 to mint one."
     }
 
-    if (-not ($SubjectName -or $Thumbprint)) {
-        throw "Provide -SubjectName or -Thumbprint when exporting secrets."
+    if (-not $secretsPrepared) {
+        if (-not ($SubjectName -or $Thumbprint)) {
+            throw "Provide -SubjectName or -Thumbprint when exporting secrets."
+        }
+        if (-not $Repo) {
+            throw "Provide -Repo or declare 'repo' under the selected codesign channel in dist-workspace.toml."
+        }
+        $bootstrapArgs = @{}
+        if ($SubjectName) { $bootstrapArgs.SubjectName = $SubjectName }
+        if ($Thumbprint) { $bootstrapArgs.Thumbprint = $Thumbprint }
+        $bootstrapArgs.Store = $Store
+        $bootstrapArgs.StoreLocation = $StoreLocation
+        $bootstrapArgs.PfxPassword = $PfxPassword
+        $bootstrapArgs.Repo = $Repo
+        $bootstrapArgs.EnvFile = $EnvFile
+        if ($Environment) { $bootstrapArgs.Environment = $Environment }
+        if ($SkipGitHubSecrets) { $bootstrapArgs.SkipGitHubSecrets = $true }
+        & $bootstrapScript @bootstrapArgs
     }
-    if (-not $Repo) {
-        throw "Provide -Repo or declare 'repo' under the selected codesign channel in dist-workspace.toml."
-    }
-    $bootstrapArgs = @{}
-    if ($SubjectName) { $bootstrapArgs.SubjectName = $SubjectName }
-    if ($Thumbprint) { $bootstrapArgs.Thumbprint = $Thumbprint }
-    $bootstrapArgs.Store = $Store
-    $bootstrapArgs.StoreLocation = $StoreLocation
-    $bootstrapArgs.PfxPassword = $PfxPassword
-    $bootstrapArgs.Repo = $Repo
-    $bootstrapArgs.EnvFile = $EnvFile
-    if ($Environment) { $bootstrapArgs.Environment = $Environment }
-    if ($SkipGitHubSecrets) { $bootstrapArgs.SkipGitHubSecrets = $true }
-    & $bootstrapScript @bootstrapArgs
 }
 
 if (-not (Test-Path $EnvFile)) {
