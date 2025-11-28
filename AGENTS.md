@@ -32,3 +32,4 @@
 
 ## Additional References
 - See `HACKING.org` for environment bootstrapping, release automation, and script-level workflows.***
+- When reading repo files via `python -c`/PowerShell, pass `encoding='utf-8'` (or `-Encoding UTF8`) to avoid the recurring Windows `UnicodeDecodeError: 'charmap'` failures.

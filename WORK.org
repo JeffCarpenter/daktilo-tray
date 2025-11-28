@@ -147,6 +147,7 @@
 - [ ] Reconcile `.github/workflows/release.yml` with the current cargo-dist template while preserving cargo-pants, signtool, and installer smoke hooks so `dist build` can drop `--allow-dirty`.
 - [ ] Teach `scripts/test-installer.ps1` + CI smoke job to read channel metadata (subject/thumbprint expectations) and emit structured signtool logs for GitHub annotations.
 - [ ] Bake ACME profile validation into CI (lint `dist-workspace.toml` to ensure tokens/domains are set) so release promotion fails fast when metadata drifts.
+- [ ] Ensure the release workflow checks out the sibling `daktilo` sources (submodule checkout, extra `actions/checkout`, or vendored crate) so `cargo metadata` can resolve `daktilo_lib` during `dist plan`.
 ** Coverage Roadmap
 :PROPERTIES:
 :status: in_review
@@ -264,3 +265,26 @@
 ** 2025-11-28T13:05:00-06:00 Next steps checkpoint
 - Blocked on remote workflow dry-run until `.github/workflows/release.yml` lands on origin/main; once pushed, re-run `gh workflow run Release --ref main` to validate cargo-dist template + smoke hooks.
 - After the workflow exists upstream, continue with the installer-report verification (already done) and documentation updates, then proceed to remaining WORK.org roadmap items (installer report consumption wiring already done; next: coverage follow-ups once reprioritized).
+** 2025-11-28T12:05:00-08:00 Fork + workflow dispatch dry-run
+- Forked `ndtoan96/daktilo-tray` into `JeffCarpenter/daktilo-tray`, added it as `jeff`, and pushed `main` so we can exercise CI without origin perms.
+- Added `workflow_dispatch` trigger to `.github/workflows/release.yml`, committed (`Enable release workflow dispatch`), and re-ran `gh workflow run Release --ref main`; dispatch now succeeds.
+- Plan job fails because `cargo metadata` cannot load `daktilo_lib` at `../daktilo/crates/daktilo_lib` on GitHub runners—the sibling `daktilo` repo is missing, so the next step is to fetch it (submodule, sparse checkout, or artifact) before `dist plan`.
+- Installer-smoke, build, host, and announce jobs all skipped because plan failed; need to unblock metadata resolution before re-running.
+** 2025-11-28T12:25:00-06:00 Build verification
+- Ran `cargo build`; workspace still compiles cleanly with the known `daktilo_lib` warnings (`audio-tests` cfg flag + missing docs). Confirms local tree is consistent before tweaking CI dependencies.
+
+** 2025-11-28T13:32:00-06:00 Release workflow dependency bootstrap plan
+- Recap blocker: `dist plan` on GitHub runners fails to resolve the path dependency `../daktilo/crates/daktilo_lib`.
+- Decided to keep the path dependency (so local contributors can keep hacking against `../daktilo`) and instead teach CI to clone the sibling repo on demand; evaluated swapping to crates.io `daktilo_lib` but keeping the path avoids surprises while we still maintain patches out of tree.
+- Action breakdown:
+  1. Introduce workflow-level env knobs for the dependency repo/ref so we can change forks/channels without editing every job.
+  2. After each `actions/checkout`, run a light-weight clone step that materializes `../daktilo` (with `--depth 1 --branch main`) on both Linux and Windows runners.
+  3. Re-run `gh workflow run Release --ref main` once pushed to ensure the plan job clears the metadata phase before resuming installer/doc follow-ups already logged in WORK.org.
+
+** 2025-11-28T13:45:00-06:00 Release workflow + AGENTS updates
+- Added global `DAKTILO_REPO/DAKTILO_REF` env vars plus bootstrap steps in the plan/build jobs so CI clones `ndtoan96/daktilo` into `../daktilo` before invoking `dist`.
+- Updated `AGENTS.md` “Additional References” with the UTF-8 reminder so future scripting uses the right encoding instead of tripping the Windows `UnicodeDecodeError` we kept hitting.
+- Next: validate the refreshed workflow via `gh workflow run Release --ref main` after pushing to the fork, then log the results and continue with installer-report/doc tasks from WORK.org:245+.
+
+** 2025-11-28T13:52:00-06:00 Build verification
+- Ran `cargo build`; workspace still compiles successfully with the usual upstream `daktilo_lib` warnings (`audio-tests` cfg + missing docs). Confirms the workflow/AGENTS edits didn’t break local builds before triggering CI.
