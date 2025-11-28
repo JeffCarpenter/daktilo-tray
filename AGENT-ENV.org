@@ -1,0 +1,48 @@
+#+title: Agent Environment Notes
+#+date: 2025-11-27T19:31:03.630315-08:00
+#+author: Codex
+
+* Shell & Quoting
+- Default shell: PowerShell (pwsh) with escape char backtick (). Double quotes inside string literals need doubling or single quotes; prefer here-strings for multi-line patches.
+- Inline Python works via python -c as noted by user; ensure quotes are PowerShell-safe or build the script in a here-string assigned to $py.
+- pply_patch struggles with PowerShell heredoc syntax; when edits are complex, fall back to Python file rewrites or use here-string pipes into python to avoid quoting issues.
+
+* Preferred Tools
+- File search: use d (installed) or 
+g (
+g requires a pattern).
+- Diffing: D:\scoop\shims\diff.exe provides GNU diffutils 2.8.7 when Git porcelain is insufficient.
+- HTML chunking guidance from user: rely on hq, jq, rg, sd, and pandoc combinations when processing HTML.
+
+* Git Environment
+- Git version 2.52.0.windows.1 available; some legacy flags like --no-ext-diff are unsupported, so stick to basic porcelain options or external diff tools.
+- Repository path: D:\code\fork\daktilo-tray with full write access (danger-full-access sandbox).
+- git diff --numstat HEAD failed earlier due to environment quirks; prefer git diff --cached --numstat or explicit files.
+
+* Python Toolchain
+- CPython 3.11.4 accessible via python; ensure UTF-8 read/write by passing ncoding='utf-8' when reading org files to avoid cp1252 decode errors.
+- Multi-line scripts: assign to a PowerShell variable (e.g., $py = @'...'@) and pipe into python to avoid escaping braces like ${ } inside GitHub workflow files.
+
+* PowerShell Idioms
+- Use Set-Content/Add-Content for appending to org files; large append operations may require -Encoding UTF8.
+- Some commands (e.g., Get-Content WORK.org -Tail N) can hang/timeout; prefer Python for reliable UTF-8 handling when slicing.
+- Set-PSDebug -Trace 1 output shows scripts rely on helper modules in scripts/common-dist.ps1; import via . (Join-Path ...).
+
+* Release/Signing Context
+- Codesign relies on signtool.exe located at C:\Program Files (x86)\Windows Kits\10\App Certification Kit\signtool.exe; environment variable SIGNTOOL_PATH respected.
+- Certificates are pulled from channel-specific metadata in dist-workspace.toml; automation expects .codesign*.env files and may auto-provision via ACME or self-signed flows.
+
+* CI/Automation Reminders
+- Always update WORK.org (and related org docs) to log planning/execution details; keep entries timestamped ISO8601 with timezone.
+- cargo build must succeed before finishing any task; capture warnings (e.g., daktilo_lib unexpected cfg + missing docs).
+- When editing release automation, regenerate via dist init --yes or dist generate, then re-apply custom cargo-pants/signing/smoke steps manually.
+
+* Troubleshooting Notes
+- git diff --stat and other commands occasionally return empty output despite changes; confirm staging via git status -sb.
+- When Add-Content fails with 'pipe being closed', rerun with explicit -Path and longer timeout.
+- Avoid pply_patch when files include ${ } (GitHub expressions); rewriting with Python prevents PowerShell from interpreting braces.
+
+* References
+- AGENTS.md covers coding style, build commands, and org documentation expectations; this file focuses on shell/environment specifics to avoid duplication.
+
+# EOF

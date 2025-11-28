@@ -237,3 +237,8 @@
 ** 2025-11-27T19:18:12-08:00 Build validation
 - Ran cargo build; workspace succeeded with existing daktilo_lib warnings about audio-tests cfg + missing docs.
 
+** 2025-11-27T19:25:33-08:00 Next actions plan
+- Dry-run the regenerated Release workflow via gh workflow run Release --ref main (or equivalent) to confirm the cargo-dist template + custom hooks behave in CI.
+- Expand scripts/test-installer.ps1 report to include signed file path + verification timestamps so CI annotations can link logs precisely.
+- Begin documenting the signtool verification pipeline in HACKING.org, referencing the new structured output for future contributors.
+
