@@ -308,3 +308,25 @@
 - Run `gh workflow run Release --ref main` (run `19754978954`); dependency checkout + promote now works, but `dist host --tag=main` fails because workflow_dispatch on a branch sets `github.ref_name=main`, which isn’t a SemVer tag.
 - Patched the plan-job expression to only invoke `dist host --steps=create --tag=…` when the ref actually points at a tag (`startsWith(github.ref, 'refs/tags/')`); otherwise the job falls back to `dist plan` for dry-runs.
 - Next: push the guard, rerun the workflow, and capture whether the plan job clears so we can move on to installer/doc tasks.
+
+** 2025-11-28T14:34:00-06:00 Release dry-run attempt #7
+- Triggered `gh workflow run Release --ref main` (run `19755015321`). plan job now reaches `dist plan`, but cargo-dist exits 255 complaining that `.github/workflows/release.yml` diverged from the template (the diff against dist’s generated content lists our daktilo checkout + smoke wiring).
+- Need to teach CI to set `DIST_ALLOW_DIRTY=1` for plan/build (or adopt `dist init --yes` + template overlay approach) so cargo-dist stops erroring on intentional customizations.
+- Also noted the GitHub run log now stretches to ~567 lines; capture a follow-up to restructure jobs or emit structured logs so future debugging isn’t as noisy.
+** 2025-11-27T21:42:37.127410-08:00 Dist workflow unblock for customizations
+- Added DIST_ALLOW_DIRTY=1 to plan/build/global/host jobs in .github/workflows/release.yml so cargo-dist tolerates our daktilo checkout + smoke wiring.
+- Rationale: release workflow intentionally diverges from template to clone daktilo sibling and run cargo-pants/smoke; allowing dirty ensures plan/build/host succeed while we keep automation intact.
+- Next: re-dispatch gh workflow run Release --ref main to verify plan passes before moving on to installer-report + documentation tasks.
+** 2025-11-27T21:51:01.273544-08:00 Cargo-dist template options
+- Read cargo-dist book sections on config and CI customization to catalog supported extension hooks (plan/build/global custom jobs, github-build-setup, github-custom-runners).
+- Conclusion: to drop allow-dirty we need to re-express our daktilo checkout + signtool/cargo-pants wiring via supported hooks: e.g., move daktilo fetch into a reusable workflow invoked via plan-jobs/local-artifacts-jobs, inject long setup steps via github-build-setup, and stash signtool summary ingestion in a custom local-artifacts job instead of hand-editing release.yml.
+- Next: draft concrete plan (overlay files + dist config changes) so release.yml can be fully generated again, then test by running dist init --yes and confirming CI stays clean without allow-dirty.
+*** Plan: cargo-dist template reconciliation
+- [ ] Author reusable workflow .github/workflows/daktilo-checkout.yml that clones JeffCarpenter/daktilo into ../daktilo, outputs ready path, and expose it via plan/local-artifacts/global/installer jobs.
+- [ ] Add plan-jobs/local-artifacts-jobs/global-artifacts-jobs entries in dist-workspace.toml so generated release.yml calls those reusable helpers instead of inline edits.
+- [ ] Convert existing cargo-pants/signtool/test-installer wiring into either github-build-setup (for extra steps prior to dist build) or separate reusable workflows triggered via local-artifacts-jobs, keeping scripts in repo but off template.
+- [ ] Run dist init --yes to regenerate release.yml from template; verify git diff only includes new reusable workflows + config, so allow-dirty can be removed.
+** 2025-11-27T21:52:00.991896-08:00 Template reconciliation plan logged
+- Research confirmed cargo-dist supports reusable workflows (`plan-jobs`, `local-artifacts-jobs`, etc.) plus github-build-setup/custom runners, so we can move daktilo checkout + signtool/pants wiring out of release.yml edits.
+- Logged next steps: author helper workflows, add plan/local/global job references, convert setup into github-build-setup hook, rerun dist init --yes to regen clean workflow and drop allow-dirty.
+- Next: implement the reusable workflow + config changes, regenerate release.yml, then re-trigger gh workflow run Release --ref main.
