@@ -130,16 +130,22 @@ if (-not $defaultAutostart -and $hasEntry) {
 
 $signTool = Get-SignToolPath
 Write-Summary "signtool: $signTool"
+$verifyCommand = "`"$signTool`" verify /pa /v `"$($msi.FullName)`""
+$verifyStarted = Get-Date
 & $signTool verify /pa /v "$($msi.FullName)" 2>&1 | Tee-Object -FilePath $verifyLog | Out-Null
+$verifyCompleted = Get-Date
+$verifyDuration = [math]::Round(($verifyCompleted - $verifyStarted).TotalSeconds, 3)
 $signtoolExit = $LASTEXITCODE
 $signature = Get-AuthenticodeSignature -FilePath $msi.FullName -ErrorAction SilentlyContinue
 $actualSubject = $null
 $actualThumbprint = $null
 $actualVerified = $false
+$signatureStatus = $null
 if ($signature -and $signature.SignerCertificate) {
     $actualSubject = $signature.SignerCertificate.Subject
     $actualThumbprint = $signature.SignerCertificate.Thumbprint
     $actualVerified = ($signature.Status -eq 'Valid')
+    $signatureStatus = $signature.Status
     Write-Summary "Authenticode status: $($signature.Status)"
 }
 if ($actualSubject) { Write-Summary "Actual subject: $actualSubject" }
@@ -166,13 +172,19 @@ $report = [ordered]@{
     channel = $Channel
     expected = $expectedSign
     actual = [ordered]@{
+        file_path = $msi.FullName
         subject = $actualSubject
         thumbprint = $actualThumbprint
         verified = $actualVerified
+        signature_status = $signatureStatus
     }
     verify = [ordered]@{
         exit_code = $signtoolExit
         log_path = $verifyLog
+        started_at = $verifyStarted.ToString("o")
+        completed_at = $verifyCompleted.ToString("o")
+        duration_seconds = $verifyDuration
+        command = $verifyCommand
     }
 }
 $report | ConvertTo-Json -Depth 6 | Set-Content -Path $reportPath

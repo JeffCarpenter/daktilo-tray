@@ -83,7 +83,13 @@ pwsh scripts/release-windows.ps1 -SkipSecrets -Repo yourorg/daktilo-tray -PfxPas
 ** Installer smoke tests
 - `scripts/test-installer.ps1 -ArtifactsDir <dir>` snapshots the latest MSI, installs it quietly, launches the installed binary with `DAKTILO_AUTOSTART_ONLY=1` (which forces the tray app to apply `[workspace.metadata.dist.autostart.default_enabled]` and exit), captures the HKCU `Run` value, runs `signtool verify /pa /v`, uninstalls, and writes every log under `target/smoke-tests/`.
 - `.github/workflows/release.yml` has an `installer-smoke` job wired after the Windows build matrix; `host` refuses to publish if the MSI install, autostart check, or signtool verification fails. Grab the `installer-smoke-<run-id>` artifact for the registry snapshot + logs.
-- When you need to reproduce this locally, set `DAKTILO_AUTOSTART_ONLY=1` and launch the installed exe once—the app will flip the Run key and exit immediately, so you can inspect the registry without touching the tray/UI.
+- When you need to reproduce this locally, set `DAKTILO_AUTOSTART_ONLY=1` and launch the installed exe once-the app will flip the Run key and exit immediately, so you can inspect the registry without touching the tray/UI.
+- Smoke harness emits `target/smoke-tests/signtool-report.json`; schema highlights:
+  - `channel`: resolved dist channel (`dev`, `stable`, etc.).
+  - `expected`: codesign metadata (subject, thumbprint, store, store_location).
+  - `actual`: `file_path`, `subject`, `thumbprint`, `verified`, `signature_status`.
+  - `verify`: `command`, `started_at`/`completed_at` (ISO 8601), `duration_seconds`, `exit_code`, and `log_path`.
+- `.github/workflows/release.yml` parses the report, prints the structured summary into `$GITHUB_STEP_SUMMARY`, and fails the job when verification mismatches arise. Use the log path if you need to replay signtool locally.
 
 ** ACME bootstrap with Caddy + Let's Encrypt
 - Use `scripts/request-acme-pfx.ps1 -Domains @("sign.yourdomain.com") -Email you@yourdomain.com -OutputPfx .\public-ca.pfx -PfxPassword 'change-me'` to spin up `caddy run` with an in-memory Caddyfile, satisfy HTTP-01 on this host, wait for the issued certificate under `target/acme-cache/`, and convert it to a PFX automatically.

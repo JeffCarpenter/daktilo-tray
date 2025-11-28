@@ -247,3 +247,17 @@
 - Step 2 (Installer report enhancements): add file path + timestamps in scripts/test-installer.ps1, update workflow summary, validate JSON output locally, log findings.
 - Step 3 (Docs): extend HACKING.org with signtool reporting section, include schema + troubleshooting tips, cross-link release automation chapter.
 
+
+** 2025-11-27T20:13:11-08:00 Release workflow dry-run attempt
+- gh workflow run Release --ref main failed because GitHub reports no workflow named Release on origin/main; remote repo lacks the refreshed workflow until changes are pushed.
+- gh workflow run release.yml also returned HTTP 404 for ndtoan96/daktilo-tray, so fully exercising CI is blocked locally; will proceed with installer-report + docs steps after capturing template metadata.
+** 2025-11-28T12:25:00-06:00 Release workflow dry-run attempt #2
+- Re-ran `gh workflow run Release --ref main`; GitHub CLI still reports "could not find any workflows named Release" because origin/main has not received the regenerated workflow yet.
+- Queried GitHub via MCP `repo://ndtoan96/daktilo-tray/.../.github/workflows/release.yml`; API returned 404 confirming the workflow file is absent upstream, so CI dry-run remains blocked until we push.
+- Action: proceed with installer-report + documentation improvements locally, note that remote validation will remain pending until workflow lands on origin/main.
+** 2025-11-28T12:45:00-06:00 Installer report enrichment
+- Extended `scripts/test-installer.ps1` to capture the MSI path plus signtool start/end timestamps, duration, command string, and signature status inside `signtool-report.json`.
+- Updated `.github/workflows/release.yml` summary step to surface the new metadata (artifact path, verification timestamps, duration, log path) inside `$GITHUB_STEP_SUMMARY`.
+- Documented the JSON schema + workflow consumption path in `HACKING.org` so contributors know how to debug CI failures.
+** 2025-11-28T12:55:00-06:00 Build validation
+- Ran `cargo build`; workspace succeeded with the usual upstream `daktilo_lib` warnings about `audio-tests` cfg + missing docs (unchanged from previous runs).

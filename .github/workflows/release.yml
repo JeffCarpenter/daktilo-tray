@@ -249,11 +249,17 @@ jobs:
           $summary = @()
           $summary += '### Installer Smoke'
           $summary += "- Channel: $($report.channel)"
+          $summary += "- Artifact: $($actual.file_path)"
           $summary += "- Expected Subject: $($expected.subject)"
           $summary += "- Actual Subject: $($actual.subject)"
           $summary += "- Expected Thumbprint: $($expected.thumbprint)"
           $summary += "- Actual Thumbprint: $($actual.thumbprint)"
+          $summary += "- Verified: $($actual.verified) ($($actual.signature_status))"
           $summary += "- Signtool Exit: $($verify.exit_code)"
+          $summary += "- Signtool Started: $($verify.started_at)"
+          $summary += "- Signtool Completed: $($verify.completed_at)"
+          $summary += "- Signtool Duration (s): $($verify.duration_seconds)"
+          $summary += "- Signtool Log: $($verify.log_path)"
           $summary += "- Status: $status"
           $summaryText = [string]::Join([Environment]::NewLine, $summary)
           Write-Host $summaryText
