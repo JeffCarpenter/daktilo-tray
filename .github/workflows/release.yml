@@ -65,14 +65,14 @@ jobs:
         with:
           persist-credentials: false
           submodules: recursive
-      - name: Bootstrap daktilo workspace
-        shell: bash
-        run: |
-          if [ ! -d ../daktilo ]; then
-            git clone --depth 1 --branch "$DAKTILO_REF" "https://github.com/${DAKTILO_REPO}.git" ../daktilo
-          else
-            echo "daktilo workspace already present"
-          fi
+      - name: Checkout daktilo workspace
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.DAKTILO_REPO }}
+          ref: ${{ env.DAKTILO_REF }}
+          path: ../daktilo
+          persist-credentials: false
+          submodules: recursive
       - name: Install dist
         # we specify bash to get pipefail; it guards against the `curl` command
         # failing. otherwise `sh` won't catch that `curl` returned non-0
@@ -133,22 +133,14 @@ jobs:
         with:
           persist-credentials: false
           submodules: recursive
-      - name: Bootstrap daktilo workspace (Unix)
-        if: runner.os != 'Windows'
-        shell: bash
-        run: |
-          if [ ! -d ../daktilo ]; then
-            git clone --depth 1 --branch "$DAKTILO_REF" "https://github.com/${DAKTILO_REPO}.git" ../daktilo
-          else
-            echo "daktilo workspace already present"
-          fi
-      - name: Bootstrap daktilo workspace (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          if (-not (Test-Path ..\daktilo)) {
-            git clone --depth 1 --branch $env:DAKTILO_REF "https://github.com/$env:DAKTILO_REPO.git" ..\daktilo
-          }
+      - name: Checkout daktilo workspace
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.DAKTILO_REPO }}
+          ref: ${{ env.DAKTILO_REF }}
+          path: ../daktilo
+          persist-credentials: false
+          submodules: recursive
       - name: Install Rust non-interactively if not already installed
         if: ${{ matrix.container }}
         run: |
@@ -239,14 +231,14 @@ jobs:
         with:
           persist-credentials: false
           submodules: recursive
-      - name: Bootstrap daktilo workspace (Unix)
-        shell: bash
-        run: |
-          if [ ! -d ../daktilo ]; then
-            git clone --depth 1 --branch "$DAKTILO_REF" "https://github.com/${DAKTILO_REPO}.git" ../daktilo
-          else
-            echo "daktilo workspace already present"
-          fi
+      - name: Checkout daktilo workspace
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.DAKTILO_REPO }}
+          ref: ${{ env.DAKTILO_REF }}
+          path: ../daktilo
+          persist-credentials: false
+          submodules: recursive
       - name: Download Windows artifacts
         uses: actions/download-artifact@v4
         with:
@@ -326,6 +318,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          persist-credentials: false
+          submodules: recursive
+      - name: Checkout daktilo workspace
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.DAKTILO_REPO }}
+          ref: ${{ env.DAKTILO_REF }}
+          path: ../daktilo
           persist-credentials: false
           submodules: recursive
       - name: Install cached dist

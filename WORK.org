@@ -288,3 +288,8 @@
 
 ** 2025-11-28T13:52:00-06:00 Build verification
 - Ran `cargo build`; workspace still compiles successfully with the usual upstream `daktilo_lib` warnings (`audio-tests` cfg + missing docs). Confirms the workflow/AGENTS edits didn’t break local builds before triggering CI.
+
+** 2025-11-28T14:00:00-06:00 Release dry-run + fix
+- Triggered `gh workflow run Release --ref main` (run `19754876933` on the fork); plan job now starts but fails early because the manual `git clone https://github.com/${DAKTILO_REPO}` step prompts for credentials on hosted runners.
+- Replaced the ad-hoc clone steps with additional `actions/checkout@v4` invocations (with `path: ../daktilo`) across the plan/build/smoke/global jobs so GitHub injects the right token automatically.
+- Next: push the update, re-run the workflow, and capture whether `dist plan` can finally load `daktilo_lib`; continue with the remaining installer/report/doc tasks afterwards.
