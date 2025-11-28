@@ -70,9 +70,14 @@ jobs:
         with:
           repository: ${{ env.DAKTILO_REPO }}
           ref: ${{ env.DAKTILO_REF }}
-          path: ../daktilo
+          path: daktilo-src
           persist-credentials: false
           submodules: recursive
+      - name: Promote daktilo workspace
+        shell: bash
+        run: |
+          rm -rf ../daktilo
+          mv daktilo-src ../daktilo
       - name: Install dist
         # we specify bash to get pipefail; it guards against the `curl` command
         # failing. otherwise `sh` won't catch that `curl` returned non-0
@@ -138,9 +143,23 @@ jobs:
         with:
           repository: ${{ env.DAKTILO_REPO }}
           ref: ${{ env.DAKTILO_REF }}
-          path: ../daktilo
+          path: daktilo-src
           persist-credentials: false
           submodules: recursive
+      - name: Promote daktilo workspace (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          rm -rf ../daktilo
+          mv daktilo-src ../daktilo
+      - name: Promote daktilo workspace (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (Test-Path ..\daktilo) {
+            Remove-Item -Recurse -Force ..\daktilo
+          }
+          Move-Item -Path daktilo-src -Destination ..\daktilo
       - name: Install Rust non-interactively if not already installed
         if: ${{ matrix.container }}
         run: |
@@ -236,9 +255,16 @@ jobs:
         with:
           repository: ${{ env.DAKTILO_REPO }}
           ref: ${{ env.DAKTILO_REF }}
-          path: ../daktilo
+          path: daktilo-src
           persist-credentials: false
           submodules: recursive
+      - name: Promote daktilo workspace
+        shell: pwsh
+        run: |
+          if (Test-Path ..\daktilo) {
+            Remove-Item -Recurse -Force ..\daktilo
+          }
+          Move-Item -Path daktilo-src -Destination ..\daktilo
       - name: Download Windows artifacts
         uses: actions/download-artifact@v4
         with:
@@ -325,9 +351,14 @@ jobs:
         with:
           repository: ${{ env.DAKTILO_REPO }}
           ref: ${{ env.DAKTILO_REF }}
-          path: ../daktilo
+          path: daktilo-src
           persist-credentials: false
           submodules: recursive
+      - name: Promote daktilo workspace
+        shell: bash
+        run: |
+          rm -rf ../daktilo
+          mv daktilo-src ../daktilo
       - name: Install cached dist
         uses: actions/download-artifact@v4
         with:

@@ -293,3 +293,8 @@
 - Triggered `gh workflow run Release --ref main` (run `19754876933` on the fork); plan job now starts but fails early because the manual `git clone https://github.com/${DAKTILO_REPO}` step prompts for credentials on hosted runners.
 - Replaced the ad-hoc clone steps with additional `actions/checkout@v4` invocations (with `path: ../daktilo`) across the plan/build/smoke/global jobs so GitHub injects the right token automatically.
 - Next: push the update, re-run the workflow, and capture whether `dist plan` can finally load `daktilo_lib`; continue with the remaining installer/report/doc tasks afterwards.
+
+** 2025-11-28T14:10:00-06:00 Release dry-run attempt #4
+- Reran `gh workflow run Release --ref main` (run `19754914879`); `actions/checkout` rejected `path: ../daktilo` with “Repository path … is not under …/daktilo-tray”.
+- Updated the workflow again to clone into `daktilo-src` inside the workspace and explicitly move it to `../daktilo` (with OS-specific `mv`/`Move-Item` steps so both Linux and Windows runners end up with the sibling tree).
+- Next up: push the fix, dispatch the workflow once more, and verify whether plan/build jobs finally reach `dist plan`.
