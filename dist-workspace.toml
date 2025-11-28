@@ -35,6 +35,12 @@ repo = "ndtoan96/daktilo-tray"
 environment = "codesign-dev"
 env_file = ".codesign.dev.env"
 
+[workspace.metadata.dist.codesign.channels.dev.auto_provision]
+enabled = true
+valid_days = 365
+hash_algorithm = "SHA256"
+key_length = 4096
+
 [workspace.metadata.dist.codesign.channels.stable]
 description = "Publicly trusted cert stored in the LocalMachine store (imported from your CA)"
 store = "My"

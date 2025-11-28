@@ -9,10 +9,15 @@ param(
     [string]$Environment,
     [string[]]$DistArgs = @("--installer", "msi"),
     [switch]$SkipSecrets,
+    [switch]$SkipGitHubSecrets,
     [string]$Tag,
     [string]$Channel,
     [string]$ConfigPath = "dist-workspace.toml",
-    [switch]$AllowDirty
+    [switch]$AllowDirty,
+    [switch]$AutoProvision,
+    [int]$AutoProvisionValidDays = 365,
+    [ValidateSet("SHA256", "SHA384", "SHA512")][string]$AutoProvisionHashAlgorithm = "SHA256",
+    [int]$AutoProvisionKeyLength = 4096
 )
 
 . (Join-Path -Path $PSScriptRoot -ChildPath "common-dist.ps1")
@@ -24,6 +29,64 @@ function Require-Command {
     if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
         throw "Required command '$Name' not found. $InstallHint"
     }
+}
+
+function Test-CertificateExists {
+    param(
+        [string]$SubjectName,
+        [string]$Thumbprint,
+        [string]$Store,
+        [string]$StoreLocation
+    )
+
+    $storePath = "Cert:\$StoreLocation\$Store"
+    if (-not (Test-Path $storePath)) {
+        return $false
+    }
+
+    $certs = @(Get-ChildItem $storePath)
+    if ($Thumbprint) {
+        $normalized = $Thumbprint.Replace(" ", "").ToUpperInvariant()
+        $certs = $certs | Where-Object { $_.Thumbprint.Replace(" ", "").ToUpperInvariant() -eq $normalized }
+    }
+    if ($SubjectName) {
+        $certs = $certs | Where-Object { $_.Subject -like "*$SubjectName*" }
+    }
+    return $certs.Count -gt 0
+}
+
+function New-SelfSignedCodeSigningCert {
+    param(
+        [Parameter(Mandatory = $true)][string]$SubjectName,
+        [Parameter(Mandatory = $true)][string]$Store,
+        [Parameter(Mandatory = $true)][string]$StoreLocation,
+        [int]$ValidDays = 365,
+        [int]$KeyLength = 4096,
+        [ValidateSet("SHA256", "SHA384", "SHA512")][string]$HashAlgorithm = "SHA256"
+    )
+
+    $storePath = "Cert:\$StoreLocation\$Store"
+    if (-not (Test-Path $storePath)) {
+        throw "Cannot auto-provision certificate because store '$storePath' does not exist."
+    }
+
+    $notAfter = (Get-Date).AddDays($ValidDays)
+    Write-Host "Auto-provisioning self-signed code signing certificate '$SubjectName' in $storePath (valid until $($notAfter.ToUniversalTime().ToString('u')))."
+    $cert = New-SelfSignedCertificate `
+        -Subject $SubjectName `
+        -Type CodeSigningCert `
+        -CertStoreLocation $storePath `
+        -NotAfter $notAfter `
+        -KeyExportPolicy Exportable `
+        -KeyLength $KeyLength `
+        -HashAlgorithm $HashAlgorithm `
+        -FriendlyName $SubjectName
+
+    if (-not $cert) {
+        throw "Failed to auto-provision a self-signed certificate for $SubjectName."
+    }
+
+    return $cert
 }
 
 Require-Command -Name "gh" -InstallHint "Install GitHub CLI from https://cli.github.com/."
@@ -69,6 +132,27 @@ if ($metadata) {
         if (-not $PSBoundParameters.ContainsKey("Environment") -and $settings.environment) {
             $Environment = $settings.environment
         }
+        if ($settings.auto_provision) {
+            $autoSettings = $settings.auto_provision
+            if ($autoSettings -is [bool]) {
+                if (-not $PSBoundParameters.ContainsKey("AutoProvision")) {
+                    $AutoProvision = [bool]$autoSettings
+                }
+            } elseif ($autoSettings.PSObject.Properties.Count -gt 0) {
+                if (-not $PSBoundParameters.ContainsKey("AutoProvision") -and $autoSettings.enabled -ne $null) {
+                    $AutoProvision = [bool]$autoSettings.enabled
+                }
+                if (-not $PSBoundParameters.ContainsKey("AutoProvisionValidDays") -and $autoSettings.valid_days) {
+                    $AutoProvisionValidDays = [int]$autoSettings.valid_days
+                }
+                if (-not $PSBoundParameters.ContainsKey("AutoProvisionHashAlgorithm") -and $autoSettings.hash_algorithm) {
+                    $AutoProvisionHashAlgorithm = [string]$autoSettings.hash_algorithm
+                }
+                if (-not $PSBoundParameters.ContainsKey("AutoProvisionKeyLength") -and $autoSettings.key_length) {
+                    $AutoProvisionKeyLength = [int]$autoSettings.key_length
+                }
+            }
+        }
         if ($resolvedChannel) {
             Write-Host "Codesign channel resolved to '$resolvedChannel' via dist metadata."
         }
@@ -88,6 +172,25 @@ if (-not (Test-Path $bootstrapScript)) {
 }
 
 if (-not $SkipSecrets) {
+    $certificateExists = Test-CertificateExists -SubjectName $SubjectName -Thumbprint $Thumbprint -Store $Store -StoreLocation $StoreLocation
+    if (-not $certificateExists -and $AutoProvision) {
+        if (-not $SubjectName) {
+            throw "Auto-provisioning needs -SubjectName to synthesize a cert."
+        }
+        New-SelfSignedCodeSigningCert `
+            -SubjectName $SubjectName `
+            -Store $Store `
+            -StoreLocation $StoreLocation `
+            -ValidDays $AutoProvisionValidDays `
+            -KeyLength $AutoProvisionKeyLength `
+            -HashAlgorithm $AutoProvisionHashAlgorithm | Out-Null
+        $certificateExists = Test-CertificateExists -SubjectName $SubjectName -Thumbprint $Thumbprint -Store $Store -StoreLocation $StoreLocation
+    }
+
+    if (-not $certificateExists) {
+        throw "No matching certificate found in Cert:\$StoreLocation\$Store. Provide -Thumbprint or run scripts/provision-dev-cert.ps1 to mint one."
+    }
+
     if (-not ($SubjectName -or $Thumbprint)) {
         throw "Provide -SubjectName or -Thumbprint when exporting secrets."
     }
@@ -103,6 +206,7 @@ if (-not $SkipSecrets) {
     $bootstrapArgs.Repo = $Repo
     $bootstrapArgs.EnvFile = $EnvFile
     if ($Environment) { $bootstrapArgs.Environment = $Environment }
+    if ($SkipGitHubSecrets) { $bootstrapArgs.SkipGitHubSecrets = $true }
     & $bootstrapScript @bootstrapArgs
 }
 

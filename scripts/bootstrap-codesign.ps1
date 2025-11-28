@@ -6,7 +6,8 @@ param(
     [Parameter(Mandatory = $true)][string]$PfxPassword,
     [string]$Repo,
     [string]$EnvFile = ".\.codesign.env",
-    [string]$Environment
+    [string]$Environment,
+    [switch]$SkipGitHubSecrets
 )
 
 if (-not ($SubjectName -or $Thumbprint)) {
@@ -52,6 +53,9 @@ try {
     }
     if ($Environment) {
         $prepareArgs.Environment = $Environment
+    }
+    if ($SkipGitHubSecrets) {
+        $prepareArgs.SkipGitHubSecrets = $true
     }
     & $prepareScript @prepareArgs
 }

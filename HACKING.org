@@ -65,6 +65,7 @@ pwsh scripts/release-windows.ps1 -SkipSecrets -Repo yourorg/daktilo-tray -PfxPas
 - `scripts/prepare-codesign-secrets.ps1`: use when you already have a `.pfx` file on disk
 - `scripts/sign-windows.ps1`: sign arbitrary artifacts given base64 + password
 - `scripts/release-windows.ps1` now enforces a clean git tree before invoking `dist build`; pass `-AllowDirty` only for local smoke tests when you intentionally have pending edits.
+- Want to refresh `.codesign*.env` locally without touching GitHub secrets? Run `scripts/release-windows.ps1 -SkipGitHubSecrets` (or call `bootstrap-codesign.ps1` with the same switch); it still exports the cert + writes the env snapshot but skips the `gh secret set` calls.
 
 ** Channel-aware certificates via dist metadata
 - `dist-workspace.toml` now owns `[workspace.metadata.dist.codesign]`; add one entry per channel (ex: `dev`, `stable`) with `store`, `store_location`, `subject`/`thumbprint`, and optional `env_file`.
@@ -77,6 +78,7 @@ pwsh scripts/release-windows.ps1 -SkipSecrets -Repo yourorg/daktilo-tray -PfxPas
 - `scripts/provision-dev-cert.ps1 -SubjectName "CN=Daktilo Tray Dev" -PfxPassword 'devonly' -Repo yourorg/daktilo-tray` mints a short-lived self-signed Authenticode cert via `New-SelfSignedCertificate`, exports it, and reuses `prepare-codesign-secrets.ps1` to push secrets + refresh `.codesign.env`.
 - Add `-SkipGitHubSecrets` to avoid touching GitHub and only refresh the local env snapshot (useful when you just need local smoke test signatures).
 - Reminder: Windows will not trust self-signed dev certs automatically-import them into Trusted Root locally if you need to suppress warnings, but never ship them to end users.
+- `[workspace.metadata.dist.codesign.channels.<name>.auto_provision]` lets you turn on zero-touch certificate synthesis per channel (dev already sets `enabled = true`, plus default validity/hash/key length). When enabled (or when you pass `-AutoProvision`), `scripts/release-windows.ps1` auto-creates a self-signed cert in the configured store if the requested `-SubjectName` is missing before exporting secrets. Disable it with `-AutoProvision:$false` if you only trust manually imported certs, or override knobs per run via `-AutoProvisionValidDays`, `-AutoProvisionKeyLength`, and `-AutoProvisionHashAlgorithm`.
 
 ** Installer smoke tests
 - `scripts/test-installer.ps1 -ArtifactsDir <dir>` snapshots the latest MSI, installs it quietly, launches the installed binary with `DAKTILO_AUTOSTART_ONLY=1` (which forces the tray app to apply `[workspace.metadata.dist.autostart.default_enabled]` and exit), captures the HKCU `Run` value, runs `signtool verify /pa /v`, uninstalls, and writes every log under `target/smoke-tests/`.
