@@ -197,7 +197,6 @@ jobs:
             ${{ steps.cargo-dist.outputs.paths }}
             ${{ env.BUILD_MANIFEST_NAME }}
 
-  # Build and package all the platform-agnostic(ish) things
   installer-smoke:
     needs:
       - plan
@@ -229,6 +228,41 @@ jobs:
             -ArtifactsDir "$PWD\artifacts" `
             -Channel $env:DIST_CHANNEL `
             -ConfigPath "dist-workspace.toml"
+      - name: Summarize smoke verification
+        if: always()
+        shell: pwsh
+        run: |
+          $reportPath = "target/smoke-tests/signtool-report.json"
+          if (-not (Test-Path $reportPath)) {
+            Write-Error "signtool report missing: $reportPath"
+            exit 1
+          }
+          $report = Get-Content -Raw -Path $reportPath | ConvertFrom-Json
+          $expected = $report.expected
+          $actual = $report.actual
+          $verify = $report.verify
+          $status = "pass"
+          if (-not $actual.verified -or $verify.exit_code -ne 0) {
+            $status = "fail"
+            Write-Error "Signature verification mismatch"
+          }
+          $summary = @()
+          $summary += '### Installer Smoke'
+          $summary += "- Channel: $($report.channel)"
+          $summary += "- Expected Subject: $($expected.subject)"
+          $summary += "- Actual Subject: $($actual.subject)"
+          $summary += "- Expected Thumbprint: $($expected.thumbprint)"
+          $summary += "- Actual Thumbprint: $($actual.thumbprint)"
+          $summary += "- Signtool Exit: $($verify.exit_code)"
+          $summary += "- Status: $status"
+          $summaryText = [string]::Join([Environment]::NewLine, $summary)
+          Write-Host $summaryText
+          if ($env:GITHUB_STEP_SUMMARY) {
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value $summaryText
+          }
+          if ($status -eq 'fail') {
+            exit 1
+          }
       - name: Upload installer logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -236,6 +270,8 @@ jobs:
           name: installer-smoke-${{ github.run_id }}
           path: target/smoke-tests
           retention-days: 7
+
+  # Build and package all the platform-agnostic(ish) things
   build-global-artifacts:
     needs:
       - plan

@@ -19,6 +19,7 @@ New-Item -ItemType Directory -Path $logDir -Force | Out-Null
 $installLog = Join-Path $logDir "msi-install.log"
 $verifyLog = Join-Path $logDir "signtool-verify.log"
 $summaryPath = Join-Path $logDir "summary.txt"
+$reportPath = Join-Path $logDir "signtool-report.json"
 
 function Write-Summary {
     param([string]$Message)
@@ -42,6 +43,33 @@ if ($metadata -and $metadata.workspace -and
 }
 Write-Summary "Channel: $Channel"
 Write-Summary "Expected autostart default: $defaultAutostart"
+
+$codesignProfile = $null
+$expectedSign = [ordered]@{
+    subject       = $null
+    thumbprint    = $null
+    store         = $null
+    store_location = $null
+}
+if ($metadata) {
+    try {
+        $codesignProfile = Get-CodesignProfile -Metadata $metadata -Channel $Channel
+    } catch {
+        Write-Warning "Failed to resolve codesign metadata: $($_.Exception.Message)"
+    }
+}
+if ($codesignProfile -and $codesignProfile.Settings) {
+    $settings = $codesignProfile.Settings
+    if ($settings.subject) { $expectedSign.subject = $settings.subject }
+    if ($settings.thumbprint) { $expectedSign.thumbprint = $settings.thumbprint }
+    if ($settings.store) { $expectedSign.store = $settings.store }
+    if ($settings.store_location) { $expectedSign.store_location = $settings.store_location }
+    Write-Summary "Codesign channel metadata: $($codesignProfile.Name)"
+    if ($expectedSign.subject) { Write-Summary "Expected subject: $($expectedSign.subject)" }
+    if ($expectedSign.thumbprint) { Write-Summary "Expected thumbprint: $($expectedSign.thumbprint)" }
+} else {
+    Write-Summary "Codesign channel metadata not found for $Channel"
+}
 
 $msi = Get-ChildItem -Path $ArtifactsDir -Filter *.msi -Recurse | Sort-Object LastWriteTime -Descending | Select-Object -First 1
 if (-not $msi) {
@@ -103,8 +131,54 @@ if (-not $defaultAutostart -and $hasEntry) {
 $signTool = Get-SignToolPath
 Write-Summary "signtool: $signTool"
 & $signTool verify /pa /v "$($msi.FullName)" 2>&1 | Tee-Object -FilePath $verifyLog | Out-Null
-if ($LASTEXITCODE -ne 0) {
-    throw "signtool verify failed with exit code $LASTEXITCODE"
+$signtoolExit = $LASTEXITCODE
+$signature = Get-AuthenticodeSignature -FilePath $msi.FullName -ErrorAction SilentlyContinue
+$actualSubject = $null
+$actualThumbprint = $null
+$actualVerified = $false
+if ($signature -and $signature.SignerCertificate) {
+    $actualSubject = $signature.SignerCertificate.Subject
+    $actualThumbprint = $signature.SignerCertificate.Thumbprint
+    $actualVerified = ($signature.Status -eq 'Valid')
+    Write-Summary "Authenticode status: $($signature.Status)"
+}
+if ($actualSubject) { Write-Summary "Actual subject: $actualSubject" }
+if ($actualThumbprint) { Write-Summary "Actual thumbprint: $actualThumbprint" }
+$subjectMismatch = $false
+$thumbMismatch = $false
+if ($expectedSign.subject -and $actualSubject) {
+    if ($actualSubject -notlike "*$($expectedSign.subject)*") {
+        $subjectMismatch = $true
+    }
+}
+if ($expectedSign.subject -and -not $actualSubject) {
+    $subjectMismatch = $true
+}
+if ($expectedSign.thumbprint -and $actualThumbprint) {
+    if (-not [string]::Equals($expectedSign.thumbprint, $actualThumbprint, [System.StringComparison]::OrdinalIgnoreCase)) {
+        $thumbMismatch = $true
+    }
+}
+if ($expectedSign.thumbprint -and -not $actualThumbprint) {
+    $thumbMismatch = $true
+}
+$report = [ordered]@{
+    channel = $Channel
+    expected = $expectedSign
+    actual = [ordered]@{
+        subject = $actualSubject
+        thumbprint = $actualThumbprint
+        verified = $actualVerified
+    }
+    verify = [ordered]@{
+        exit_code = $signtoolExit
+        log_path = $verifyLog
+    }
+}
+$report | ConvertTo-Json -Depth 6 | Set-Content -Path $reportPath
+if ($signtoolExit -ne 0 -or -not $actualVerified -or $subjectMismatch -or $thumbMismatch) {
+    $details = "exit=$signtoolExit verified=$actualVerified subjectMismatch=$subjectMismatch thumbMismatch=$thumbMismatch"
+    throw "signtool verify failed: $details"
 }
 
 $uninstallArgs = "/x `"$($msi.FullName)`" /qn /norestart"

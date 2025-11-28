@@ -217,3 +217,23 @@
 - Ran `cargo build` to validate the workspace after the scripting changes; build succeeded with the existing upstream warnings from `daktilo_lib`.
 
 
+** 2025-11-27T19:07:26-08:00 Release workflow + smoke tooling plan
+- Refresh .github/workflows/release.yml from cargo-dist 0.30.x template via dist generate, restitch cargo-pants, signing, and installer-smoke steps without --allow-dirty.
+- Update scripts/test-installer.ps1 to resolve channel metadata (store, location, subject, thumbprint) from dist-workspace.toml, run signtool verify, and emit structured logs for GitHub annotations.
+- Teach release smoke GitHub job to consume the structured logs and fail fast on signature mismatches.
+- Re-run cargo build and capture findings in WORK.org before committing.
+
+** 2025-11-27T19:12:49-08:00 Context checkpoint
+- Consumed roughly 14% of token budget refreshing cargo-dist workflow; documenting checkpoint before deeper edits per instructions.
+- Next: reapply cargo-pants/sign/smoke steps onto regenerated workflow and capture required metadata-aware installer annotations.
+
+** 2025-11-27T19:16:45-08:00 Release workflow refresh executed
+- Re-generated cargo-dist workflow, merged cargo-pants/sign/smoke hooks back in, and inserted structured installer summary step without relying on --allow-dirty.
+
+** 2025-11-27T19:17:49-08:00 Installer metadata plumbing
+- scripts/test-installer.ps1 now resolves codesign metadata from dist-workspace.toml, captures signtool + Authenticode details, and emits signtool-report.json for CI annotation.
+- Release workflow consumption job now parses the structured output and fails when the report is missing or mismatched.
+
+** 2025-11-27T19:18:12-08:00 Build validation
+- Ran cargo build; workspace succeeded with existing daktilo_lib warnings about audio-tests cfg + missing docs.
+
