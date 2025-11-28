@@ -261,3 +261,6 @@
 - Documented the JSON schema + workflow consumption path in `HACKING.org` so contributors know how to debug CI failures.
 ** 2025-11-28T12:55:00-06:00 Build validation
 - Ran `cargo build`; workspace succeeded with the usual upstream `daktilo_lib` warnings about `audio-tests` cfg + missing docs (unchanged from previous runs).
+** 2025-11-28T13:05:00-06:00 Next steps checkpoint
+- Blocked on remote workflow dry-run until `.github/workflows/release.yml` lands on origin/main; once pushed, re-run `gh workflow run Release --ref main` to validate cargo-dist template + smoke hooks.
+- After the workflow exists upstream, continue with the installer-report verification (already done) and documentation updates, then proceed to remaining WORK.org roadmap items (installer report consumption wiring already done; next: coverage follow-ups once reprioritized).
