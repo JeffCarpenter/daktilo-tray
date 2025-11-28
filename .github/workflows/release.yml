@@ -18,7 +18,7 @@ permissions:
   "contents": "write"
 
 env:
-  DAKTILO_REPO: "ndtoan96/daktilo"
+  DAKTILO_REPO: "JeffCarpenter/daktilo"
   DAKTILO_REF: "main"
 
 # This task will run whenever you push a git tag that looks like a version

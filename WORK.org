@@ -298,3 +298,8 @@
 - Reran `gh workflow run Release --ref main` (run `19754914879`); `actions/checkout` rejected `path: ../daktilo` with “Repository path … is not under …/daktilo-tray”.
 - Updated the workflow again to clone into `daktilo-src` inside the workspace and explicitly move it to `../daktilo` (with OS-specific `mv`/`Move-Item` steps so both Linux and Windows runners end up with the sibling tree).
 - Next up: push the fix, dispatch the workflow once more, and verify whether plan/build jobs finally reach `dist plan`.
+
+** 2025-11-28T14:18:00-06:00 Release dry-run attempt #5
+- Dispatch `gh workflow run Release --ref main` (run `19754951189`); plan job now fails because `actions/checkout` can’t find `ndtoan96/daktilo`.
+- Realized the dependency repo we control is `JeffCarpenter/daktilo` (the upstream path doesn’t exist). Updated `DAKTILO_REPO` in the workflow env block accordingly so hosted runners pull from the same forked sources we use locally.
+- Next: push the env tweak, trigger the workflow again, and confirm whether `dist plan` finally passes.
