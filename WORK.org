@@ -303,3 +303,8 @@
 - Dispatch `gh workflow run Release --ref main` (run `19754951189`); plan job now fails because `actions/checkout` can’t find `ndtoan96/daktilo`.
 - Realized the dependency repo we control is `JeffCarpenter/daktilo` (the upstream path doesn’t exist). Updated `DAKTILO_REPO` in the workflow env block accordingly so hosted runners pull from the same forked sources we use locally.
 - Next: push the env tweak, trigger the workflow again, and confirm whether `dist plan` finally passes.
+
+** 2025-11-28T14:27:00-06:00 Release dry-run attempt #6
+- Run `gh workflow run Release --ref main` (run `19754978954`); dependency checkout + promote now works, but `dist host --tag=main` fails because workflow_dispatch on a branch sets `github.ref_name=main`, which isn’t a SemVer tag.
+- Patched the plan-job expression to only invoke `dist host --steps=create --tag=…` when the ref actually points at a tag (`startsWith(github.ref, 'refs/tags/')`); otherwise the job falls back to `dist plan` for dry-runs.
+- Next: push the guard, rerun the workflow, and capture whether the plan job clears so we can move on to installer/doc tasks.
