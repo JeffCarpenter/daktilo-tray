@@ -87,7 +87,13 @@ include_dev_dependencies = false
 cargo-dist-version = "0.30.2"
 # CI backends to support
 ci = "github"
+# Inject shared setup steps ahead of each build matrix run
+github-build-setup = "../build-setup.yml"
 # The installers to generate for each app
 installers = ["msi"]
 # Target platforms to build apps for (Rust target-triple syntax)
 targets = ["x86_64-pc-windows-msvc"]
+# Plan jobs to run in CI
+plan-jobs = ["./supply-chain-gate"]
+# Global artifacts jobs to run in CI
+global-artifacts-jobs = ["./windows-sign-smoke"]

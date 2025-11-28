@@ -1,0 +1,27 @@
+name: Supply Chain Gate
+
+on:
+  workflow_call:
+
+jobs:
+  cargo-pants:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: recursive
+      - name: Install cargo-pants
+        shell: pwsh
+        run: cargo install cargo-pants --locked
+      - name: Run cargo-pants gate
+        shell: pwsh
+        env:
+          OSS_INDEX_API_KEY: ${{ secrets.OSS_INDEX_API_KEY }}
+        run: |
+          if ($env:GITHUB_REF -like 'refs/pull/*') {
+            $channel = 'dev'
+          } else {
+            $channel = 'stable'
+          }
+          ./scripts/run-cargo-pants.ps1 -Channel $channel

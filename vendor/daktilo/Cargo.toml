@@ -1,0 +1,24 @@
+[workspace]
+members = ["crates/daktilo_lib"]
+resolver = "2"
+
+[workspace.package]
+version = "0.6.0"
+description = "Turn your keyboard into a typewriter!"
+authors = ["Orhun Parmaksiz <orhunparmaksiz@gmail.com>"]
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+homepage = "https://github.com/orhun/daktilo"
+repository = "https://github.com/orhun/daktilo"
+keywords = ["typewriter", "keyboard", "nostalgic", "type"]
+categories = ["command-line-utilities", "multimedia"]
+edition = "2021"
+
+[workspace.dependencies]
+thiserror = "1.0.58"
+serde = { version = "1.0.197", features = ["derive"] }
+tracing = "0.1.40"
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+tokio = { version = "1.37.0", features = ["macros", "rt-multi-thread", "sync"] }
+colored = "2.1.0"
+pretty_assertions = "1.4.0"

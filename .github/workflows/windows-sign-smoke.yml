@@ -1,0 +1,79 @@
+name: Windows Sign and Smoke
+
+on:
+  workflow_call:
+    inputs:
+      plan:
+        description: Dist manifest JSON from the plan step
+        required: true
+        type: string
+
+jobs:
+  sign-and-smoke:
+    runs-on: windows-latest
+    env:
+      DIST_PLAN: ${{ inputs.plan }}
+      WINDOWS_CODESIGN_PFX: ${{ secrets.WINDOWS_CODESIGN_PFX }}
+      WINDOWS_CODESIGN_PASSWORD: ${{ secrets.WINDOWS_CODESIGN_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: recursive
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: 'artifacts-build-local-*pc-windows*'
+          path: artifacts
+          merge-multiple: false
+      - name: Sign Windows artifacts
+        if: ${{ env.WINDOWS_CODESIGN_PFX && env.WINDOWS_CODESIGN_PASSWORD }}
+        shell: pwsh
+        run: |
+          $binaryDir = Join-Path $PWD 'target/dist'
+          if (-not (Test-Path $binaryDir)) {
+            New-Item -ItemType Directory -Path $binaryDir | Out-Null
+          }
+          ./scripts/sign-windows.ps1 `
+            -ArtifactsDir (Join-Path $PWD 'artifacts') `
+            -BinaryDir $binaryDir `
+            -PfxBase64 $env:WINDOWS_CODESIGN_PFX `
+            -PfxPassword $env:WINDOWS_CODESIGN_PASSWORD
+      - name: Run installer smoke test
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF -like 'refs/pull/*') {
+            $channel = 'dev'
+          } else {
+            $channel = 'stable'
+          }
+          ./scripts/test-installer.ps1 `
+            -ArtifactsDir (Join-Path $PWD 'artifacts') `
+            -Channel $channel `
+            -ConfigPath 'dist-workspace.toml'
+      - name: Summarize smoke verification
+        if: always()
+        shell: pwsh
+        run: |
+          $reportPath = "target/smoke-tests/signtool-report.json"
+          if (Test-Path $reportPath) {
+            $summary = Get-Content -Raw -Path $reportPath
+            Write-Host $summary
+            if ($env:GITHUB_STEP_SUMMARY) {
+              Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value $summary
+            }
+          }
+      - name: Upload installer logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-smoke-${{ github.run_id }}
+          path: target/smoke-tests
+          retention-days: 7
+      - name: Overwrite signed artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-build-local-x86_64-pc-windows-msvc
+          path: artifacts/artifacts-build-local-x86_64-pc-windows-msvc
+          overwrite: true
+          retention-days: 7

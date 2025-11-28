@@ -1,0 +1,34 @@
+[package]
+name = "daktilo_lib"
+version = "0.6.0"
+description.workspace = true
+authors.workspace = true
+license.workspace = true
+readme.workspace = true
+homepage.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+rust-version = "1.74.1"
+
+[dependencies]
+rdev = { version = "0.5.3", features = ["serialize"] }
+rodio = { version = "0.17.3", default-features = false, features = [
+  "symphonia-mp3",
+] }
+rust-embed = { version = "8.3.0", features = ["debug-embed", "compression"] }
+toml = "0.8.12"
+fastrand = "2.0.2"
+dirs = "5.0.1"
+regex = "1.10.4"
+serde_regex = "1.1.0"
+tokio.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+lazy_static = "1.5.0"
+
+[dev-dependencies]
+pretty_assertions.workspace = true

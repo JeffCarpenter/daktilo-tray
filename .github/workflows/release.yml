@@ -17,10 +17,6 @@ name: Release
 permissions:
   "contents": "write"
 
-env:
-  DAKTILO_REPO: "JeffCarpenter/daktilo"
-  DAKTILO_REF: "main"
-
 # This task will run whenever you push a git tag that looks like a version
 # like "1.0.0", "v0.1.0-prerelease.1", "my-app/0.1.0", "releases/v1.0.0", etc.
 # Various formats will be parsed into a VERSION and an optional PACKAGE_NAME, where
@@ -43,7 +39,6 @@ env:
 # If there's a prerelease-style suffix to the version, then the release(s)
 # will be marked as a prerelease.
 on:
-  workflow_dispatch:
   pull_request:
   push:
     tags:
@@ -60,25 +55,11 @@ jobs:
       publishing: ${{ !github.event.pull_request }}
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      DIST_ALLOW_DIRTY: "1"
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
           submodules: recursive
-      - name: Checkout daktilo workspace
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ env.DAKTILO_REPO }}
-          ref: ${{ env.DAKTILO_REF }}
-          path: daktilo-src
-          persist-credentials: false
-          submodules: recursive
-      - name: Promote daktilo workspace
-        shell: bash
-        run: |
-          rm -rf ../daktilo
-          mv daktilo-src ../daktilo
       - name: Install dist
         # we specify bash to get pipefail; it guards against the `curl` command
         # failing. otherwise `sh` won't catch that `curl` returned non-0
@@ -96,7 +77,7 @@ jobs:
       # but also really annoying to build CI around when it needs secrets to work right.)
       - id: plan
         run: |
-          dist ${{ (!github.event.pull_request && startsWith(github.ref, 'refs/tags/') && format('host --steps=create --tag={0}', github.ref_name)) || 'plan' }} --output-format=json > plan-dist-manifest.json
+          dist ${{ (!github.event.pull_request && format('host --steps=create --tag={0}', github.ref_name)) || 'plan' }} --output-format=json > plan-dist-manifest.json
           echo "dist ran successfully"
           cat plan-dist-manifest.json
           echo "manifest=$(jq -c "." plan-dist-manifest.json)" >> "$GITHUB_OUTPUT"
@@ -106,12 +87,17 @@ jobs:
           name: artifacts-plan-dist-manifest
           path: plan-dist-manifest.json
 
+  custom-supply-chain-gate:
+    uses: ./.github/workflows/supply-chain-gate.yml
+    secrets: inherit
+
   # Build and packages all the platform-specific things
   build-local-artifacts:
     name: build-local-artifacts (${{ join(matrix.targets, ', ') }})
     # Let the initial task tell us to not run (currently very blunt)
     needs:
       - plan
+      - custom-supply-chain-gate
     if: ${{ fromJson(needs.plan.outputs.val).ci.github.artifacts_matrix.include != null && (needs.plan.outputs.publishing == 'true' || fromJson(needs.plan.outputs.val).ci.github.pr_run_mode == 'upload') }}
     strategy:
       fail-fast: false
@@ -131,7 +117,6 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       BUILD_MANIFEST_NAME: target/distrib/${{ join(matrix.targets, '-') }}-dist-manifest.json
-      DIST_ALLOW_DIRTY: "1"
     steps:
       - name: enable windows longpaths
         run: |
@@ -140,28 +125,6 @@ jobs:
         with:
           persist-credentials: false
           submodules: recursive
-      - name: Checkout daktilo workspace
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ env.DAKTILO_REPO }}
-          ref: ${{ env.DAKTILO_REF }}
-          path: daktilo-src
-          persist-credentials: false
-          submodules: recursive
-      - name: Promote daktilo workspace (Unix)
-        if: runner.os != 'Windows'
-        shell: bash
-        run: |
-          rm -rf ../daktilo
-          mv daktilo-src ../daktilo
-      - name: Promote daktilo workspace (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          if (Test-Path ..\daktilo) {
-            Remove-Item -Recurse -Force ..\daktilo
-          }
-          Move-Item -Path daktilo-src -Destination ..\daktilo
       - name: Install Rust non-interactively if not already installed
         if: ${{ matrix.container }}
         run: |
@@ -169,6 +132,9 @@ jobs:
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
             echo "$HOME/.cargo/bin" >> $GITHUB_PATH
           fi
+      - name: "Verify vendor dependencies"
+        run: "./scripts/ci/verify-daktilo.ps1"
+        shell: "pwsh"
       - name: Install dist
         run: ${{ matrix.install_dist.run }}
       # Get the dist-manifest
@@ -181,43 +147,11 @@ jobs:
       - name: Install dependencies
         run: |
           ${{ matrix.packages_install }}
-      - name: Install cargo-pants
-        if: contains(matrix.targets, 'pc-windows')
-        shell: pwsh
-        run: |
-          cargo install cargo-pants --locked
-      - name: Supply-chain gate (cargo-pants)
-        if: contains(matrix.targets, 'pc-windows')
-        shell: pwsh
-        env:
-          OSS_INDEX_API_KEY: ${{ secrets.OSS_INDEX_API_KEY }}
-          DIST_CHANNEL: ${{ github.event_name == 'pull_request' && 'dev' || 'stable' }}
-        run: |
-          if (-not $env:DIST_CHANNEL) {
-            $env:DIST_CHANNEL = "stable"
-          }
-          ./scripts/run-cargo-pants.ps1 -Channel $env:DIST_CHANNEL
       - name: Build artifacts
         run: |
           # Actually do builds and make zips and whatnot
           dist build ${{ needs.plan.outputs.tag-flag }} --print=linkage --output-format=json ${{ matrix.dist_args }} > dist-manifest.json
           echo "dist ran successfully"
-      - name: Sign Windows artifacts
-        if: contains(matrix.targets, 'pc-windows')
-        shell: pwsh
-        env:
-          WINDOWS_CODESIGN_PFX: ${{ secrets.WINDOWS_CODESIGN_PFX }}
-          WINDOWS_CODESIGN_PASSWORD: ${{ secrets.WINDOWS_CODESIGN_PASSWORD }}
-        run: |
-          if (-not $env:WINDOWS_CODESIGN_PFX -or -not $env:WINDOWS_CODESIGN_PASSWORD) {
-            Write-Host "Codesign secrets missing; skipping signtool step."
-            exit 0
-          }
-          & "$PWD/scripts/sign-windows.ps1" `
-            -ArtifactsDir "target/distrib" `
-            -BinaryDir "target/dist" `
-            -PfxBase64 $env:WINDOWS_CODESIGN_PFX `
-            -PfxPassword $env:WINDOWS_CODESIGN_PASSWORD
       - id: cargo-dist
         name: Post-build
         # We force bash here just because github makes it really hard to get values up
@@ -239,101 +173,6 @@ jobs:
             ${{ steps.cargo-dist.outputs.paths }}
             ${{ env.BUILD_MANIFEST_NAME }}
 
-  installer-smoke:
-    needs:
-      - plan
-      - build-local-artifacts
-    if: ${{ fromJson(needs.plan.outputs.val).ci.github.artifacts_matrix.include != null && (needs.plan.outputs.publishing == 'true' || fromJson(needs.plan.outputs.val).ci.github.pr_run_mode == 'upload') }}
-    runs-on: "windows-latest"
-    env:
-      DIST_CHANNEL: ${{ github.event_name == 'pull_request' && 'dev' || 'stable' }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-          submodules: recursive
-      - name: Checkout daktilo workspace
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ env.DAKTILO_REPO }}
-          ref: ${{ env.DAKTILO_REF }}
-          path: daktilo-src
-          persist-credentials: false
-          submodules: recursive
-      - name: Promote daktilo workspace
-        shell: pwsh
-        run: |
-          if (Test-Path ..\daktilo) {
-            Remove-Item -Recurse -Force ..\daktilo
-          }
-          Move-Item -Path daktilo-src -Destination ..\daktilo
-      - name: Download Windows artifacts
-        uses: actions/download-artifact@v4
-        with:
-          pattern: 'artifacts-build-local-*pc-windows*'
-          path: artifacts
-          merge-multiple: true
-      - name: Run installer smoke test
-        shell: pwsh
-        env:
-          DIST_CHANNEL: ${{ github.event_name == 'pull_request' && 'dev' || 'stable' }}
-        run: |
-          if (-not $env:DIST_CHANNEL) {
-            $env:DIST_CHANNEL = "stable"
-          }
-          ./scripts/test-installer.ps1 `
-            -ArtifactsDir "$PWD\artifacts" `
-            -Channel $env:DIST_CHANNEL `
-            -ConfigPath "dist-workspace.toml"
-      - name: Summarize smoke verification
-        if: always()
-        shell: pwsh
-        run: |
-          $reportPath = "target/smoke-tests/signtool-report.json"
-          if (-not (Test-Path $reportPath)) {
-            Write-Error "signtool report missing: $reportPath"
-            exit 1
-          }
-          $report = Get-Content -Raw -Path $reportPath | ConvertFrom-Json
-          $expected = $report.expected
-          $actual = $report.actual
-          $verify = $report.verify
-          $status = "pass"
-          if (-not $actual.verified -or $verify.exit_code -ne 0) {
-            $status = "fail"
-            Write-Error "Signature verification mismatch"
-          }
-          $summary = @()
-          $summary += '### Installer Smoke'
-          $summary += "- Channel: $($report.channel)"
-          $summary += "- Artifact: $($actual.file_path)"
-          $summary += "- Expected Subject: $($expected.subject)"
-          $summary += "- Actual Subject: $($actual.subject)"
-          $summary += "- Expected Thumbprint: $($expected.thumbprint)"
-          $summary += "- Actual Thumbprint: $($actual.thumbprint)"
-          $summary += "- Verified: $($actual.verified) ($($actual.signature_status))"
-          $summary += "- Signtool Exit: $($verify.exit_code)"
-          $summary += "- Signtool Started: $($verify.started_at)"
-          $summary += "- Signtool Completed: $($verify.completed_at)"
-          $summary += "- Signtool Duration (s): $($verify.duration_seconds)"
-          $summary += "- Signtool Log: $($verify.log_path)"
-          $summary += "- Status: $status"
-          $summaryText = [string]::Join([Environment]::NewLine, $summary)
-          Write-Host $summaryText
-          if ($env:GITHUB_STEP_SUMMARY) {
-            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value $summaryText
-          }
-          if ($status -eq 'fail') {
-            exit 1
-          }
-      - name: Upload installer logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: installer-smoke-${{ github.run_id }}
-          path: target/smoke-tests
-          retention-days: 7
-
   # Build and package all the platform-agnostic(ish) things
   build-global-artifacts:
     needs:
@@ -343,25 +182,11 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       BUILD_MANIFEST_NAME: target/distrib/global-dist-manifest.json
-      DIST_ALLOW_DIRTY: "1"
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
           submodules: recursive
-      - name: Checkout daktilo workspace
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ env.DAKTILO_REPO }}
-          ref: ${{ env.DAKTILO_REF }}
-          path: daktilo-src
-          persist-credentials: false
-          submodules: recursive
-      - name: Promote daktilo workspace
-        shell: bash
-        run: |
-          rm -rf ../daktilo
-          mv daktilo-src ../daktilo
       - name: Install cached dist
         uses: actions/download-artifact@v4
         with:
@@ -394,18 +219,26 @@ jobs:
           path: |
             ${{ steps.cargo-dist.outputs.paths }}
             ${{ env.BUILD_MANIFEST_NAME }}
+
+  custom-windows-sign-smoke:
+    needs:
+      - plan
+      - build-local-artifacts
+    uses: ./.github/workflows/windows-sign-smoke.yml
+    with:
+      plan: ${{ needs.plan.outputs.val }}
+    secrets: inherit
   # Determines if we should publish/announce
   host:
     needs:
       - plan
       - build-local-artifacts
       - build-global-artifacts
-      - installer-smoke
+      - custom-windows-sign-smoke
     # Only run if we're "publishing", and only if plan, local and global didn't fail (skipped is fine)
-    if: ${{ always() && needs.plan.result == 'success' && needs.plan.outputs.publishing == 'true' && (needs.build-global-artifacts.result == 'skipped' || needs.build-global-artifacts.result == 'success') && (needs.build-local-artifacts.result == 'skipped' || needs.build-local-artifacts.result == 'success') && (needs.installer-smoke.result == 'skipped' || needs.installer-smoke.result == 'success') }}
+    if: ${{ always() && needs.plan.result == 'success' && needs.plan.outputs.publishing == 'true' && (needs.build-global-artifacts.result == 'skipped' || needs.build-global-artifacts.result == 'success') && (needs.custom-windows-sign-smoke.result == 'skipped' || needs.custom-windows-sign-smoke.result == 'success') && (needs.build-local-artifacts.result == 'skipped' || needs.build-local-artifacts.result == 'success') }}
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      DIST_ALLOW_DIRTY: "1"
     runs-on: "ubuntu-22.04"
     outputs:
       val: ${{ steps.host.outputs.manifest }}

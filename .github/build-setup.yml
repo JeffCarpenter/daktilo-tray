@@ -1,0 +1,3 @@
+- name: Verify vendor dependencies
+  shell: pwsh
+  run: ./scripts/ci/verify-daktilo.ps1
