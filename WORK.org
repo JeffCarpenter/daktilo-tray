@@ -242,3 +242,8 @@
 - Expand scripts/test-installer.ps1 report to include signed file path + verification timestamps so CI annotations can link logs precisely.
 - Begin documenting the signtool verification pipeline in HACKING.org, referencing the new structured output for future contributors.
 
+** 2025-11-27T20:03:37-08:00 Execution breakdown
+- Step 1 (Release workflow dry-run): fetch template hash, trigger gh workflow run Release --ref main, watch logs, archive results, note in WORK.org.
+- Step 2 (Installer report enhancements): add file path + timestamps in scripts/test-installer.ps1, update workflow summary, validate JSON output locally, log findings.
+- Step 3 (Docs): extend HACKING.org with signtool reporting section, include schema + troubleshooting tips, cross-link release automation chapter.
+
