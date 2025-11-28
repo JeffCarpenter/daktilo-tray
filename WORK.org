@@ -330,3 +330,8 @@
 - Research confirmed cargo-dist supports reusable workflows (`plan-jobs`, `local-artifacts-jobs`, etc.) plus github-build-setup/custom runners, so we can move daktilo checkout + signtool/pants wiring out of release.yml edits.
 - Logged next steps: author helper workflows, add plan/local/global job references, convert setup into github-build-setup hook, rerun dist init --yes to regen clean workflow and drop allow-dirty.
 - Next: implement the reusable workflow + config changes, regenerate release.yml, then re-trigger gh workflow run Release --ref main.
+** 2025-11-27T21:56:59.335036-08:00 Next steps after allow-dirty unblock
+- [ ] Author .github/workflows/daktilo-checkout.yml reusable workflow and wire it via dist plan/local/global job hooks so release.yml stays template-owned.
+- [ ] Move cargo-pants + signtool setup into github-build-setup (or reusable workflows) and update dist-workspace.toml accordingly.
+- [ ] Run dist init --yes to regenerate release.yml + Wix template, confirm clean git status, then drop allow-dirty.
+- [ ] Dispatch gh workflow run Release --ref main to verify plan/build/smoke pass with the regenerated template.
