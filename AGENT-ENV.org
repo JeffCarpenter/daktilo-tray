@@ -4,7 +4,7 @@
 
 * Shell & Quoting
 - Default shell: PowerShell (pwsh) with escape char backtick (`). Use here-strings for multi-line snippets and double-up quotes when embedding JSON/YAML.
-- Inline Python via `python -c` works well; for complex scripts assign to `$py = @'... '@` and pass to python to avoid escaping ${{ }} tokens.
+- Inline Python via `python -c` works well; for complex scripts assign to a Here-String, like `$py = @'... '@` and pass to python to avoid escaping ${{ }} tokens.
 - `apply_patch` is fragile under PowerShell quoting; prefer Python-based rewrites or `sd`/`rg` edits when workflows contain GitHub expressions.
 
 * Preferred Tools
